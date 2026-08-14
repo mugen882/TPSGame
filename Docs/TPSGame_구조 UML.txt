@@ -1,0 +1,150 @@
+@startuml TPSGame_Core
+title TPSGame 구조
+
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam class {
+    BackgroundColor #FDFDFD
+    BorderColor #555555
+    ArrowColor #555555
+}
+
+' =================================================================
+' Subsystem : 
+' =================================================================
+package "Subsystem" #cfb183 {
+    class UDifficultySubsystem {
+        +SetDifficulty()
+        +GetDifficulty()
+    }
+}
+
+' =================================================================
+' Character : 발사 요청 + 데미지 수신 주체
+' =================================================================
+package "Character" #F4F8FF {
+    abstract class ACommonCharacter {
+        +GetAbilitySystemComponent()
+        +GetAimPoint() : FVector
+        +OnFireNotify()
+        +ApplyDamageEffect() <<static>>
+        #HandleDeath() <<virtual>>
+        #HandleHealthChanged()
+        -ASC / AttributeSet
+    }
+    class APlayerCharacter {
+        +IsAiming()
+        +GetWeaponManager()
+        -입력→발사/조준/스왑
+    }
+    class AEnemyCharacter {
+        +SetFireTarget() / FireOnce()
+        +GetCombatProfile()
+        -CurrentWeapon
+    }
+    class UPlayerAimComponent{
+        +IsAiming() / ComputeAimPoint()
+    }
+}
+
+ACommonCharacter <|-- APlayerCharacter
+ACommonCharacter <|-- AEnemyCharacter
+AEnemyCharacter ..> UDifficultySubsystem
+APlayerCharacter *-- UPlayerAimComponent
+
+' =================================================================
+' GAS : 발사 어빌리티 + 어트리뷰트(데미지/체력)
+' =================================================================
+package "GAS" #F4FFF6 {
+    class UTPSAttributeSet {
+        +Health / MaxHealth / Damage
+        +PostGameplayEffectExecute() : Health 차감·사망판정
+    }
+    abstract class UGA_FireBase {
+        +ActivateAbility()
+        #FireOnce() : AimPoint 계산 + Weapon->Fire
+        #GetOwningCharacter() : ACommonCharacter*
+        #ApplyCooldown() : FireInterval(SetByCaller)
+        #ShouldFireImmediately() : 플레이어=즉발 / 적=노티파이
+    }
+    class UGA_FireRifle
+    class UGA_FireRocketLauncher
+    class UGA_FireMachineGun {
+        -FireLoopTimer : 연사 루프
+    }
+}
+
+UGA_FireBase <|-- UGA_FireRifle
+UGA_FireBase <|-- UGA_FireRocketLauncher
+UGA_FireBase <|-- UGA_FireMachineGun
+
+ACommonCharacter *-- UTPSAttributeSet
+
+' =================================================================
+' Weapon : 실제 발사 메커니즘 + 데미지 GE 적용
+' =================================================================
+package "Weapon" #FFF8F4 {
+    class UWeaponManagerComponent {
+        +SpawnWeapons() / SetCurrentWeapon()
+        +GetCurrentWeapon()
+        -Weapons[] / CurrentWeapon
+    }
+    abstract class AWeaponBase {
+        +Fire(AimPoint, Controller) : bool
+        +CanFire() / HasAmmo() / Reload()
+        +GetMuzzleLocation()
+        #FireInternal() <<PURE_VIRTUAL>>
+        -CurrentAmmo / FireInterval / FireRange
+    }
+    class AWeaponRifle {
+        #FireInternal() <<hitscan>>
+    }
+    class AWeaponRocketLauncher {
+        #FireInternal() <<projectile>>
+    }
+    class AWeaponMachineGun {
+        #FireInternal() <<연사+퍼짐>>
+    }
+    class AProjectile {
+        #OnHit() : 명중 시 데미지 GE
+    }
+    class AProjectileRocket {
+        #OnHit() : 명중 시 데미지 GE
+    }
+}
+
+AWeaponBase <|-- AWeaponRifle
+AWeaponBase <|-- AWeaponRocketLauncher
+AWeaponBase <|-- AWeaponMachineGun
+
+ACommonCharacter *-- UWeaponManagerComponent
+UWeaponManagerComponent *-- AWeaponBase : manages
+AProjectile <|-- AProjectileRocket
+AWeaponRocketLauncher ..> AProjectileRocket : spawns
+
+' =================================================================
+' AI : 적의 발사/이동 의사결정 (BT 구동)
+' =================================================================
+package "AI" #FFFCF0 {
+    class AEnemyAIController {
+        #OnPossess() / OnTargetPerceived()
+        -BehaviorTree / Perception
+        -Blackboard: TargetActor / bCanSeeTarget
+    }
+    class UEnemyCombatProfile <<DataAsset>> {
+        +WeaponType / WeaponClass / FireAbility
+        +PreferredRange / RangeTolerance
+        +bBurstFire / bLeadTarget
+    }
+    class UEnemyCombatComponent <<UActorComponent>> {
+        +GrantFireAbilities / SwitchToRandomProfile / GetCurrentProfile
+        +GetFireAbilitySpecHandle / GetAttackRange
+    }
+}
+
+AEnemyCharacter *-- UEnemyCombatComponent
+UEnemyCombatComponent *-- UEnemyCombatProfile
+UEnemyCombatComponent ..> UDifficultySubsystem
+
+@enduml
