@@ -113,10 +113,10 @@ protected:
 	TObjectPtr<UWeaponManagerComponent> WeaponManager;
 
 	UPROPERTY()
-	AActor* LastDamageInstigator = nullptr;
+	TObjectPtr<AActor> LastDamageInstigator = nullptr;
 
 	UPROPERTY(VisibleAnywhere, Category = "GAS")
-	UAbilitySystemComponent* AbilitySystemComponent;
+	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
 
 private:
 	UFUNCTION()
@@ -132,7 +132,7 @@ private:
 	TObjectPtr<UAnimMontage> FireMontage;
 
 	UPROPERTY()
-	UTPSAttributeSet* AttributeSet;
+	TObjectPtr<UTPSAttributeSet> AttributeSet;
 
 	UPROPERTY(EditDefaultsOnly, Category = "GAS")
 	TArray<TSubclassOf<class UGameplayAbility>> DefaultAbilities;

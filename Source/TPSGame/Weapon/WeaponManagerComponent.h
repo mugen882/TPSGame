@@ -44,7 +44,7 @@ protected:
     TMap<EWeaponType, AWeaponBase*> Weapons;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon")
-    AWeaponBase* CurrentWeapon = nullptr;
+    TObjectPtr<AWeaponBase> CurrentWeapon = nullptr;
 
     EWeaponType CurrentWeaponType = EWeaponType::None;
 

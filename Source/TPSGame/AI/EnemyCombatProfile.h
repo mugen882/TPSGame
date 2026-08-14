@@ -50,8 +50,6 @@ public:
     float BurstDuration = 1.5f;
     UPROPERTY(EditAnywhere)
     float BurstCooldown = 1.0f;
-    UPROPERTY(EditAnywhere)
-	float SafeRangeMultiplier = 1.f; // 로켓: 스플래시 자해 방지 최소거리 배율. MinSafeRange = PreferredRange * SafeRangeMultiplier
 
 private:
 #if WITH_EDITOR

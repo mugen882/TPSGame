@@ -21,6 +21,24 @@ void UTPSAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, f
 	{
 		NewValue = FMath::Clamp(NewValue, 0.0f, GetMaxHealth());
 	}
+	else if (Attribute == GetMaxHealthAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 1.0f);
+	}
+}
+
+void UTPSAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
+{
+	Super::PostAttributeChange(Attribute, OldValue, NewValue);
+
+	// MaxHealth가 줄어들면 현재 Health가 그 위로 남지 않도록 함께 낮춘다.
+	if (Attribute == GetMaxHealthAttribute() && GetHealth() > NewValue)
+	{
+		if (UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent())
+		{
+			ASC->SetNumericAttributeBase(GetHealthAttribute(), NewValue);
+		}
+	}
 }
 
 void UTPSAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)

@@ -1,5 +1,6 @@
 #include "UI/AmmoWidget.h"
 #include "Character/PlayerCharacter.h"
+#include "Weapon/WeaponManagerComponent.h"
 #include "Components/TextBlock.h"
 
 void UAmmoWidget::SetOwningCharacter(APlayerCharacter* InPlayer)
@@ -16,8 +17,11 @@ void UAmmoWidget::SetOwningCharacter(APlayerCharacter* InPlayer)
 	InPlayer->OnAmmoChanged.AddDynamic(this, &UAmmoWidget::HandleAmmoChanged);
 	InPlayer->OnWeaponChanged.AddDynamic(this, &UAmmoWidget::HandleWeaponChanged);
 
-	// 바인딩 직후 현재 값으로 1회 갱신
 	InPlayer->BroadcastAmmo();
+	if (UWeaponManagerComponent* WM = InPlayer->GetWeaponManager())
+	{
+		HandleWeaponChanged(WM->GetCurrentWeaponType());
+	}
 }
 
 void UAmmoWidget::NativeDestruct()
@@ -40,7 +44,9 @@ void UAmmoWidget::Unbind()
 
 void UAmmoWidget::HandleWeaponChanged(EWeaponType WeaponType)
 {
-	FString WeaponStr = StaticEnum<EWeaponType>()->GetNameStringByValue((int64)WeaponType);
+	if (!WeaponTypeText) return;
+
+	const FString WeaponStr = StaticEnum<EWeaponType>()->GetNameStringByValue((int64)WeaponType);
 	WeaponTypeText->SetText(FText::FromString(WeaponStr));
 }
 

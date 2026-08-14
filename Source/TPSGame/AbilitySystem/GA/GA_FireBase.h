@@ -42,8 +42,12 @@ protected:
     ACommonCharacter* GetOwningCharacter(const FGameplayAbilityActorInfo* ActorInfo) const;
 
 private:
-    // 발사 몽타주 재생
-    void PlayFireMontage(const FGameplayAbilityActorInfo* ActorInfo);
+    // 발사 몽타주 재생.
+    // bEndAbilityOnMontageEnd
+    // true(적): 몽타주 종료가 어빌리티를 끝낸다(노티파이가 발사).
+    // false(플레이어): 연출용 fire-and-forget 재생만 하고 어빌리티는 즉시 종료된다.
+    // 반환값: 재생할 몽타주가 있었으면 true.
+    bool PlayFireMontage(const FGameplayAbilityActorInfo* ActorInfo, bool bEndAbilityOnMontageEnd);
 
     UFUNCTION()
     void OnFireMontageEnded();

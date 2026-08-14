@@ -35,11 +35,12 @@ void ACommonCharacter::PossessedBy(AController* NewController)
     if (AbilitySystemComponent && AttributeSet)
     {
         AbilitySystemComponent->InitAbilityActorInfo(this, this);
-        
+
         InitAbilities();
 
-        AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetHealthAttribute())
-            .AddUObject(this, &ACommonCharacter::HandleHealthChanged);
+        auto& HealthChanged = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetHealthAttribute());
+        HealthChanged.RemoveAll(this);
+        HealthChanged.AddUObject(this, &ACommonCharacter::HandleHealthChanged);
     }
 }
 

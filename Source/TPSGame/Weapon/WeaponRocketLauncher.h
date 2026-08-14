@@ -22,7 +22,7 @@ public:
 	TSubclassOf<AProjectile> GetProjectileClass() { return ProjectileClass; }
 
 protected:
-	virtual void FireInternal(const FVector& AimPoint, AController* InstigatorController) override;
+	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController) override;
 
 	UPROPERTY(EditAnywhere, Category = "Weapon|Rocket")
 	TSubclassOf<AProjectile> ProjectileClass;

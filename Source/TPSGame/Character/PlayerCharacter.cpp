@@ -15,10 +15,11 @@
 #include "Weapon/WeaponManagerComponent.h"
 #include "Character/PlayerAimComponent.h"
 #include "Common/TPSGameDefine.h"
+#include "AbilitySystem/TPSAttributeSet.h"
 
 APlayerCharacter::APlayerCharacter()
 {
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 
     CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
     CameraBoom->SetupAttachment(RootComponent);
@@ -54,14 +55,6 @@ void APlayerCharacter::BeginPlay()
         AimComponent->SetupCameraRefs(CameraBoom, FollowCamera);
 }
 
-void APlayerCharacter::Tick(float DeltaTime)
-{
-    Super::Tick(DeltaTime);
-
-    if (AimComponent)
-        AimComponent->UpdateCameraInterpolation(DeltaTime);
-}
-
 void APlayerCharacter::NotifyControllerChanged()
 {
     Super::NotifyControllerChanged();
@@ -70,7 +63,11 @@ void APlayerCharacter::NotifyControllerChanged()
     {
         if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
         {
-            Subsystem->AddMappingContext(DefaultMappingContext, 0);
+            if (DefaultMappingContext)
+            {
+                Subsystem->RemoveMappingContext(DefaultMappingContext);
+                Subsystem->AddMappingContext(DefaultMappingContext, 0);
+            }
         }
     }
 }

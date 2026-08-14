@@ -1,6 +1,8 @@
 #include "AI/BTService_UpdateAim.h"
 
 #include "AIController.h"
+#include "BehaviorTree/BehaviorTree.h"
+#include "BehaviorTree/BlackboardData.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "GameFramework/Actor.h"
 
@@ -18,6 +20,18 @@ UBTService_UpdateAim::UBTService_UpdateAim()
     BlackboardKey.AddVectorFilter(this, GET_MEMBER_NAME_CHECKED(UBTService_UpdateAim, BlackboardKey));
     // Object로 필터링
     TargetActorKeySelector.AddObjectFilter(this, GET_MEMBER_NAME_CHECKED(UBTService_UpdateAim, TargetActorKeySelector), AActor::StaticClass());
+}
+
+void UBTService_UpdateAim::InitializeFromAsset(UBehaviorTree& Asset)
+{
+    Super::InitializeFromAsset(Asset);
+
+    // 부모(BlackboardKey)는 BTService_BlackboardBase가 해석하지만, 추가로 둔
+    // TargetActorKeySelector는 직접 해석해줘야 SelectedKeyName이 NAME_None으로 남지 않는다.
+    if (UBlackboardData* BBAsset = GetBlackboardAsset())
+    {
+        TargetActorKeySelector.ResolveSelectedKey(*BBAsset);
+    }
 }
 
 void UBTService_UpdateAim::TickNode(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds)

@@ -8,6 +8,7 @@
 #include "AI/EnemyCombatProfile.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Common/AIBlackboardKeys.h"
+#include "Common/TPSLog.h"
 
 UBTTask_FireWeapon::UBTTask_FireWeapon()
 {
@@ -45,7 +46,7 @@ EBTNodeResult::Type UBTTask_FireWeapon::ExecuteTask(UBehaviorTreeComponent& Owne
     const float Dist = FVector::Dist(Enemy->GetActorLocation(), Target->GetActorLocation());
     if (Dist > Enemy->GetAttackRange())
     {
-		UE_LOG(LogTemp, Warning, TEXT("@@@ BTTask_FireWeapon: Target out of range (%.1f > %.1f)"), Dist, Enemy->GetAttackRange());
+		UE_LOG(TPSLog, Warning, TEXT("BTTask_FireWeapon: Target out of range (%.1f > %.1f)"), Dist, Enemy->GetAttackRange());
         // 사거리 밖 → 발사 안 함
         return EBTNodeResult::Succeeded;
     }
@@ -56,7 +57,7 @@ EBTNodeResult::Type UBTTask_FireWeapon::ExecuteTask(UBehaviorTreeComponent& Owne
     // 발사 시도. active/쿨다운이면 이번엔 패스
     if (!ASC->TryActivateAbility(Handle))
     {
-		UE_LOG(LogTemp, Warning, TEXT("@@@ BTTask_FireWeapon: TryActivateAbility failed"));
+		UE_LOG(TPSLog, Warning, TEXT("BTTask_FireWeapon: TryActivateAbility failed"));
         return EBTNodeResult::Succeeded;
     }
 

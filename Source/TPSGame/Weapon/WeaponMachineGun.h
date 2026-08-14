@@ -24,7 +24,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaTime) override;
-	virtual void FireInternal(const FVector& AimPoint, AController* InstigatorController) override;
+	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController) override;
 
 	UFUNCTION()
 	void AmmoReload();

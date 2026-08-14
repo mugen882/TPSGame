@@ -14,7 +14,7 @@ AWeaponRifle::AWeaponRifle()
 	Damage = 5.f;
 }
 
-void AWeaponRifle::FireInternal(const FVector& AimPoint, AController* InstigatorController)
+bool AWeaponRifle::FireInternal(const FVector& AimPoint, AController* InstigatorController)
 {
 	const FVector Start = GetMuzzleLocation();
 	const FVector Dir = (AimPoint - Start).GetSafeNormal();
@@ -28,17 +28,20 @@ void AWeaponRifle::FireInternal(const FVector& AimPoint, AController* Instigator
 	// 총구에서 크로스헤어 방향으로 → 조준점 찾기
 	if (!GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Weapon, Params))
 	{
-		return;
+		return true;   // 빗나가도 발사 자체는 이뤄졌으므로 탄약 소모
 	}
 
 	PlayImpactEffect(Hit);
 
 	AActor* HitActor = Hit.GetActor();
-	if (!HitActor) return;
+	if (!HitActor) return true;
 
 	if (Cast<ACommonCharacter>(HitActor))
 	{
-		ACommonCharacter::ApplyDamageEffect(HitActor, DamageEffectClass, Damage, GetOwner());
+		// 가해자는 발사한 캐릭터(Instigator)로 통일
+		ACommonCharacter::ApplyDamageEffect(HitActor, DamageEffectClass, Damage, GetInstigator());
 		OnHitConfirmed.Broadcast();
 	}
+
+	return true;
 }

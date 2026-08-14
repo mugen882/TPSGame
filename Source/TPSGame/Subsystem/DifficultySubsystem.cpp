@@ -1,4 +1,5 @@
 #include "Subsystem/DifficultySubsystem.h"
+#include "Common/TPSLog.h"
 
 void UDifficultySubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -31,8 +32,15 @@ void UDifficultySubsystem::SetDifficulty(EDifficulty Level)
         EnemyHealthMul = 1.4f;
         EnemySpreadMul = 0.5f;   // 더 정확
         break;
+
+    default:
+        // 새 난이도가 추가됐는데 케이스를 안 넣으면 Normal 기준으로 폴백
+        EnemyDamageMul = 1.0f;
+        EnemyHealthMul = 1.0f;
+        EnemySpreadMul = 1.0f;
+        break;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("[Difficulty] Set to %d (DmgMul=%.2f, HpMul=%.2f, SpreadMul=%.2f)"),
+    UE_LOG(TPSLog, Log, TEXT("[Difficulty] Set to %d (DmgMul=%.2f, HpMul=%.2f, SpreadMul=%.2f)"),
         (int32)Level, EnemyDamageMul, EnemyHealthMul, EnemySpreadMul);
 }

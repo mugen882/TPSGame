@@ -20,6 +20,7 @@
 #include "AI/EnemyAIController.h"
 #include "Subsystem/DifficultySubsystem.h"
 #include "Components/WidgetComponent.h"
+#include "AbilitySystem/TPSAttributeSet.h"
 
 AEnemyCharacter::AEnemyCharacter()
 {
@@ -68,6 +69,9 @@ void AEnemyCharacter::EquipInitialWeapon()
 void AEnemyCharacter::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+
+    // 죽으면 래그돌이 도는 중이므로 조준 회전을 멈춘다.
+    if (IsDead()) return;
 
     if (PendingTarget == nullptr) return;
 
@@ -146,12 +150,13 @@ void AEnemyCharacter::OnDamaged(float InDamage)
 {
     PlayHitFlash();
 
-    const float Now = GetWorld()->GetTimeSeconds();
+    const UWorld* World = GetWorld();
+    const float Now = World ? World->GetTimeSeconds() : LastHitTime;
     if (Now - LastHitTime > DamageDecayTime)   // 직전 피격에서 충분히 지났으면 누적 초기화
         RecentDamageAccum = 0.f;
 
     RecentDamageAccum += InDamage;
-    LastHitTime = GetWorld()->GetTimeSeconds();
+    LastHitTime = Now;
 
     AActor* Attacker = LastDamageInstigator;
     if (!Attacker || Attacker == this) return;
@@ -190,7 +195,9 @@ void AEnemyCharacter::OnFireNotify()
 
 void AEnemyCharacter::HandleDeath()
 {
-    Super::HandleDeath();   // 공통 래그돌
+    Super::HandleDeath();
+
+    PendingTarget = nullptr;
 
     // AI 정지
     if (AAIController* AICon = Cast<AAIController>(GetController()))

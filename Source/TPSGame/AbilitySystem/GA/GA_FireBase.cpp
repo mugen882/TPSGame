@@ -5,6 +5,8 @@
 #include "Character/CommonCharacter.h"
 #include "GameplayEffect.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Animation/AnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "AIController.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Character/EnemyCharacter.h"
@@ -37,18 +39,18 @@ bool UGA_FireBase::ShouldFireImmediately(const FGameplayAbilityActorInfo* ActorI
     return Cast<APlayerCharacter>(ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr) != nullptr;
 }
 
-void UGA_FireBase::PlayFireMontage(const FGameplayAbilityActorInfo* ActorInfo)
+bool UGA_FireBase::PlayFireMontage(const FGameplayAbilityActorInfo* ActorInfo, bool bEndAbilityOnMontageEnd)
 {
-    ACommonCharacter* Character = Cast<ACommonCharacter>(ActorInfo->AvatarActor.Get());
+    ACommonCharacter* Character = ActorInfo ? Cast<ACommonCharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
     if (Character == nullptr)
     {
-        return;
+        return false;
     }
 
     UAnimMontage* FireMontage = Character->GetFireMontage();
     if (FireMontage == nullptr)
     {
-        return;
+        return false;
     }
 
     if (AEnemyCharacter* Enemy = Cast<AEnemyCharacter>(Character))
@@ -64,11 +66,32 @@ void UGA_FireBase::PlayFireMontage(const FGameplayAbilityActorInfo* ActorInfo)
         Enemy->SetFireTarget(Target);
     }
 
-    UAbilityTask_PlayMontageAndWait* Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, FireMontage);
-    Task->OnCompleted.AddDynamic(this, &UGA_FireBase::OnFireMontageEnded);
-    Task->OnInterrupted.AddDynamic(this, &UGA_FireBase::OnFireMontageEnded);
-    Task->OnCancelled.AddDynamic(this, &UGA_FireBase::OnFireMontageEnded);
-    Task->ReadyForActivation();
+    if (bEndAbilityOnMontageEnd)
+    {
+        // 적: 몽타주가 발사 타이밍(노티파이)과 종료 타이밍을 모두 잡는다.
+        UAbilityTask_PlayMontageAndWait* Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, FireMontage);
+        if (!Task)
+        {
+            return false;   // 태스크 생성 실패 → 호출부가 즉시 EndAbility
+        }
+        Task->OnCompleted.AddDynamic(this, &UGA_FireBase::OnFireMontageEnded);
+        Task->OnInterrupted.AddDynamic(this, &UGA_FireBase::OnFireMontageEnded);
+        Task->OnCancelled.AddDynamic(this, &UGA_FireBase::OnFireMontageEnded);
+        Task->ReadyForActivation();
+    }
+    else
+    {
+        // 플레이어: 어빌리티가 곧바로 끝나므로 몽타주는 연출용으로 재생한다.
+        // (PlayMontageAndWait를 쓰면 EndAbility가 몽타주를 즉시 취소해버린다)
+        if (USkeletalMeshComponent* Mesh = Character->GetMesh())
+        {
+            if (UAnimInstance* Anim = Mesh->GetAnimInstance())
+            {
+                Anim->Montage_Play(FireMontage);
+            }
+        }
+    }
+    return true;
 }
 
 void UGA_FireBase::OnFireMontageEnded()
@@ -89,18 +112,22 @@ void UGA_FireBase::ActivateAbility(
         return;
     }
 
-    PlayFireMontage(ActorInfo);
-
     // 발사 타이밍 분기
     if (ShouldFireImmediately(ActorInfo))
     {
+        // 플레이어: 몽타주는 연출용으로만 재생하고 즉발 후 종료
+        PlayFireMontage(ActorInfo, /*bEndAbilityOnMontageEnd=*/false);
         FireOnce(ActorInfo);
 
         EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
     }
     else
     {
-        // 적은 노티파이가 발사
+        // 적: 몽타주 노티파이가 발사하고 몽타주 종료가 어빌리티를 끝낸다.
+        if (!PlayFireMontage(ActorInfo, /*bEndAbilityOnMontageEnd=*/true))
+        {
+            EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+        }
     }
 }
 

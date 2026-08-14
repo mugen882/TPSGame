@@ -1,4 +1,3 @@
-#pragma once
 #include "AI/BTTask_SwitchWeaponProfile.h"
 #include "Character/EnemyCharacter.h"
 

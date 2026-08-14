@@ -43,7 +43,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Weapon")
 	FOnWeaponHitConfirmed OnHitConfirmed;
 
-	FORCEINLINE void PlayImpactEffect(FHitResult Hit);
+	void PlayImpactEffect(const FHitResult& Hit);
 
 	FORCEINLINE const float GetFireInterval() { return FireInterval; }
 
@@ -59,9 +59,10 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
-	// 파생 클래스가 실제 발사 메커니즘 구현 (히트스캔/투사체 등)
-	virtual void FireInternal(const FVector& AimPoint, AController* InstigatorController)
-		PURE_VIRTUAL(AWeaponBase::FireInternal, );
+	// 파생 클래스가 실제 발사 메커니즘 구현 (히트스캔/투사체 등).
+	// 실제로 발사가 이뤄졌으면 true. false면 탄약을 소모하지 않는다
+	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController)
+		PURE_VIRTUAL(AWeaponBase::FireInternal, return false;);
 
 	void ShowMuzzleFlash();
 
@@ -72,7 +73,7 @@ protected:
 	float BaseDamage = 1.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
-	USkeletalMeshComponent* WeaponMesh;
+	TObjectPtr<USkeletalMeshComponent> WeaponMesh;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	FName MuzzleSocketName = TEXT("Muzzle");
@@ -97,7 +98,7 @@ protected:
 	float FireRange = 1000.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Weapon|FX")
-	UNiagaraSystem* ImpactEffect = nullptr;
+	TObjectPtr<UNiagaraSystem> ImpactEffect = nullptr;
 
 	UPROPERTY(EditAnywhere, Category="Combat")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
@@ -105,13 +106,13 @@ protected:
 private:
 	// 머즐 플래시 VFX
 	UPROPERTY(EditAnywhere, Category = "Weapon|FX")
-	UNiagaraSystem* MuzzleFlash = nullptr;
+	TObjectPtr<UNiagaraSystem> MuzzleFlash = nullptr;
 
 	UPROPERTY(EditAnywhere, Category = "Weapon|FX")
 	float MuzzleFlashScale = 1.0f;
 
 	UPROPERTY(EditAnywhere, Category="Sound")
-    class USoundBase* FireSound;
+    TObjectPtr<class USoundBase> FireSound;
 
 	float SpreadMultiplier = 1.f;   // 기본 1 = 플레이어는 영향 없음
 };

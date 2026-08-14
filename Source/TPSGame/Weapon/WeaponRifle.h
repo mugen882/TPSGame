@@ -20,5 +20,5 @@ public:
 	AWeaponRifle();
 
 protected:
-	virtual void FireInternal(const FVector& AimPoint, AController* InstigatorController) override;
+	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController) override;
 };

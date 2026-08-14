@@ -103,7 +103,7 @@ private:
 	FTimerHandle HitFlashTimer;
 
 	UPROPERTY()
-	AActor* PendingTarget = nullptr;  // 발사 예정 타깃 저장
+	TObjectPtr<AActor> PendingTarget = nullptr;  // 발사 예정 타깃 저장
 
 	bool bHoldingAim = false;
 

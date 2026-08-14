@@ -10,6 +10,8 @@
 
 AWeaponMachineGun::AWeaponMachineGun()
 {
+	PrimaryActorTick.bCanEverTick = true;
+
 	FireInterval = 0.15f;
 	Damage = 12.f;
 }
@@ -48,7 +50,7 @@ void AWeaponMachineGun::Tick(float DeltaTime)
 	}
 }
 
-void AWeaponMachineGun::FireInternal(const FVector& AimPoint, AController* InstigatorController)
+bool AWeaponMachineGun::FireInternal(const FVector& AimPoint, AController* InstigatorController)
 {
 	const FVector Start = GetMuzzleLocation();
 	FVector Dir = (AimPoint - Start).GetSafeNormal();
@@ -69,7 +71,7 @@ void AWeaponMachineGun::FireInternal(const FVector& AimPoint, AController* Insti
 	Params.AddIgnoredActor(GetOwner());
 	if (!GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Weapon, Params))
 	{
-		return;
+		return true;   // 빗나가도 발사는 이뤄짐 → 탄약 소모
 	}
 
 	if (ImpactEffect)
@@ -79,12 +81,14 @@ void AWeaponMachineGun::FireInternal(const FVector& AimPoint, AController* Insti
 	}
 
 	AActor* HitActor = Hit.GetActor();
-	if (!HitActor) return;
+	if (!HitActor) return true;
 	if (Cast<ACommonCharacter>(HitActor))
 	{
-		ACommonCharacter::ApplyDamageEffect(HitActor, DamageEffectClass, Damage, GetOwner());
+		ACommonCharacter::ApplyDamageEffect(HitActor, DamageEffectClass, Damage, GetInstigator());
 		OnHitConfirmed.Broadcast();
 	}
+
+	return true;
 }
 
 void AWeaponMachineGun::AmmoReload()

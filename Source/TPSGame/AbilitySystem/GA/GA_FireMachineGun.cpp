@@ -46,7 +46,9 @@ void UGA_FireMachineGun::ActivateAbility(
 
 void UGA_FireMachineGun::FireLoop()
 {
-    if (GetAbilitySystemComponentFromActorInfo()->HasMatchingGameplayTag(TAG_State_Reloading))
+    UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+    // 타이머는 액터/ASC 파괴 도중에도 한 번 더 돌 수 있으므로 널체크 후 종료
+    if (!ASC || ASC->HasMatchingGameplayTag(TAG_State_Reloading))
     {
         EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
         return;
@@ -62,14 +64,18 @@ void UGA_FireMachineGun::FireLoop()
         return;
     }
 
-    // 탄약 0 → 연사 종료 + 자동 리로드
+    // 탄약 0 → 자동 리로드 시도
     if (!Weapon->HasAmmo())
     {
         // 이미 리로드 중이면 대기 (루프는 계속 돌며 HasAmmo 체크)
         if (!Char->IsReloading())
         {
-            if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
-                ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(TAG_Input_Reload));
+            const bool bReloadStarted = ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(TAG_Input_Reload));
+            if (!bReloadStarted)
+            {
+                // 낙하 중 등으로 리로드가 불가하면 무한 재시도하지 않고 연사를 끝낸다.
+                EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+            }
         }
 
         return;

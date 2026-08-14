@@ -18,7 +18,7 @@ AWeaponBase::AWeaponBase()
 	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
-void AWeaponBase::PlayImpactEffect(FHitResult Hit)
+void AWeaponBase::PlayImpactEffect(const FHitResult& Hit)
 {
 	if (ImpactEffect)
 	{
@@ -45,7 +45,12 @@ bool AWeaponBase::Fire(const FVector& AimPoint, AController* InstigatorControlle
 		return false;
 	}
 
-	FireInternal(AimPoint, InstigatorController);
+	if (!FireInternal(AimPoint, InstigatorController))
+	{
+		// 실제 발사가 이뤄지지 않았으면 탄약/연출을 소모하지 않는다.
+		return false;
+	}
+
 	ShowMuzzleFlash();
 	PlayFireSound();
 

@@ -24,11 +24,13 @@ void AProjectileRocket::Explode(const FVector& Center)
         Overlaps, Center, FQuat::Identity, ObjParams,
         FCollisionShape::MakeSphere(ExplosionRadius), Params);
 
+    AActor* InstigatorActor = GetInstigator();
+
     TSet<ACommonCharacter*> Damaged;
     for (const FOverlapResult& O : Overlaps)
     {
         ACommonCharacter* Char = Cast<ACommonCharacter>(O.GetActor());
-        if (!Char || Damaged.Contains(Char)) continue;
+        if (!Char || Char == InstigatorActor || Damaged.Contains(Char)) continue;
 
         Damaged.Add(Char);
 

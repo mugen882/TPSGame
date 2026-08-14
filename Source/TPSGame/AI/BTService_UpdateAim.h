@@ -19,6 +19,8 @@ public:
 
 protected:
     virtual void TickNode(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds) override;
+    // 추가 키 셀렉터(TargetActor)를 블랙보드 애셋에 대해 해석한다.
+    virtual void InitializeFromAsset(UBehaviorTree& Asset) override;
 
 private:
     // 타겟 액터 키 (BlackboardKey는 부모가 AimLocation 용으로 제공)

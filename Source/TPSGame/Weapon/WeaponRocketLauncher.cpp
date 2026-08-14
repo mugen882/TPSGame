@@ -14,11 +14,11 @@ void AWeaponRocketLauncher::BeginPlay()
 	
 }
 
-void AWeaponRocketLauncher::FireInternal(const FVector& AimPoint, AController* InstigatorController)
+bool AWeaponRocketLauncher::FireInternal(const FVector& AimPoint, AController* InstigatorController)
 {
 	if (!ProjectileClass)
 	{
-		return;
+		return false;   // 투사체 클래스 미설정 → 발사 실패(탄약 소모 없음)
 	}
 
 	const FVector  MuzzleLoc = GetMuzzleLocation();
@@ -35,4 +35,6 @@ void AWeaponRocketLauncher::FireInternal(const FVector& AimPoint, AController* I
 		Proj->SetDamage(Damage);                       // 무기 데미지 전달
 		Proj->SetDamageEffectClass(DamageEffectClass); // GE 클래스 전달
 	}
+
+	return Proj != nullptr;
 }

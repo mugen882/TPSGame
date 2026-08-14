@@ -9,6 +9,7 @@
 #include "Common/AIBlackboardKeys.h"
 #include "Subsystem/DifficultySubsystem.h"
 #include "AbilitySystem/TPSAttributeSet.h"
+#include "Common/TPSLog.h"
 
 AEnemyAIController::AEnemyAIController()
 {
@@ -33,7 +34,7 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
 
     if (PerceptionComp)
     {
-        PerceptionComp->OnTargetPerceptionUpdated.AddDynamic(this, &AEnemyAIController::OnTargetPerceived);
+        PerceptionComp->OnTargetPerceptionUpdated.AddUniqueDynamic(this, &AEnemyAIController::OnTargetPerceived);
     }
 
     if (BehaviorTree)
@@ -44,10 +45,12 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
 
 void AEnemyAIController::OnTargetPerceived(AActor* Actor, FAIStimulus Stimulus)
 {
+    if (!Actor) return;
+
     UBlackboardComponent* BB = GetBlackboardComponent();
     if (!BB)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Blackboard is NULL"));
+        UE_LOG(TPSLog, Warning, TEXT("Blackboard is NULL"));
         return;
     }
 
@@ -87,7 +90,7 @@ void AEnemyAIController::OnTargetPerceived(AActor* Actor, FAIStimulus Stimulus)
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("Cast to PlayerCharacter FAILED: %s"), *Actor->GetName());
+        UE_LOG(TPSLog, Warning, TEXT("Cast to PlayerCharacter FAILED: %s"), *Actor->GetName());
     }
 }
 
@@ -96,7 +99,7 @@ void AEnemyAIController::NotifyDamagedBy(AActor* Attacker)
     UBlackboardComponent* BB = GetBlackboardComponent();
     if (!BB)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Blackboard is NULL"));
+        UE_LOG(TPSLog, Warning, TEXT("Blackboard is NULL"));
         return;
     }
 

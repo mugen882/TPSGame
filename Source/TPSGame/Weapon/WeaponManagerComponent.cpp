@@ -5,6 +5,7 @@
 #include "AbilitySystemComponent.h"
 #include "Common/TPSGameplayTags.h"
 #include "Animation/AnimInstance.h"
+#include "Common/TPSLog.h"
 
 UWeaponManagerComponent::UWeaponManagerComponent()
 {
@@ -133,7 +134,7 @@ void UWeaponManagerComponent::EquipWeaponByClass(TSubclassOf<AWeaponBase> Weapon
                 return;
 	    }
     }
-    UE_LOG(LogTemp, Warning, TEXT("[WeaponManager] EquipWeaponByClass: %s 인스턴스가 Weapons에 없음"), *GetNameSafe(WeaponClass));
+    UE_LOG(TPSLog, Warning, TEXT("[WeaponManager] EquipWeaponByClass: %s 인스턴스가 Weapons에 없음"), *GetNameSafe(WeaponClass));
 }
 
 void UWeaponManagerComponent::OnWeaponSwapNotify()
@@ -151,8 +152,10 @@ void UWeaponManagerComponent::OnSwapMontageEnded(UAnimMontage* Montage, bool bIn
         return;
     }
 
+    UAbilitySystemComponent* ASC = Owner->GetAbilitySystemComponent();
+
     // 죽은 상태면 스왑 마무리 안 함
-    if (Owner->GetAbilitySystemComponent()->HasMatchingGameplayTag(TAG_State_Dead))
+    if (ASC && ASC->HasMatchingGameplayTag(TAG_State_Dead))
     {
         PendingWeaponType = EWeaponType::None;
         return;
@@ -161,7 +164,7 @@ void UWeaponManagerComponent::OnSwapMontageEnded(UAnimMontage* Montage, bool bIn
     if ((int32)PendingWeaponType > (int32)EWeaponType::None)
         DoEquipWeapon(PendingWeaponType);
 
-    if (UAbilitySystemComponent* ASC = Owner->GetAbilitySystemComponent())
+    if (ASC)
         ASC->RemoveLooseGameplayTag(TAG_State_Swapping);
 
     PendingWeaponType = EWeaponType::None;

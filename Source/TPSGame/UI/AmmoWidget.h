@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Common/TPSGameTypes.h"
 #include "AmmoWidget.generated.h"
 
 class APlayerCharacter;

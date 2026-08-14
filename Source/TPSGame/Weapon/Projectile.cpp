@@ -38,6 +38,17 @@ AProjectile::AProjectile()
     InitialLifeSpan = 3.f; // 3초 뒤 자동 소멸
 }
 
+void AProjectile::BeginPlay()
+{
+    Super::BeginPlay();
+
+    // 발사자 본인과는 충돌하지 않게 한다.
+    if (AActor* Inst = GetInstigator())
+    {
+        CollisionComp->IgnoreActorWhenMoving(Inst, true);
+    }
+}
+
 void AProjectile::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
     UPrimitiveComponent* OtherComp, FVector NormalImpulse,
     const FHitResult& Hit)

@@ -5,6 +5,7 @@
 #include "Weapon/WeaponManagerComponent.h"
 #include "Subsystem/DifficultySubsystem.h"
 #include "AbilitySystem/TPSAttributeSet.h"
+#include "Weapon/WeaponBase.h"
 
 UEnemyCombatComponent::UEnemyCombatComponent()
 {
@@ -84,7 +85,9 @@ void UEnemyCombatComponent::SwitchToRandomProfile(bool bAvoidRepeat)
     const int32 Num = CombatProfiles.Num();
     if (Num == 0) return;
 
-    const float Now = GetWorld()->GetTimeSeconds();
+    const UWorld* World = GetWorld();
+    if (!World) return;
+    const float Now = World->GetTimeSeconds();
     if (Now - LastProfileSwitchTime < MinProfileSwitchInterval) return;
 
     if (Num == 1)

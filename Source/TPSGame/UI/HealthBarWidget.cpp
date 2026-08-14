@@ -1,10 +1,9 @@
 #include "UI/HealthBarWidget.h"
 #include "Character/PlayerCharacter.h"
 #include "Components/ProgressBar.h"
-
+#include "Components/TextBlock.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
-
 #include "AbilitySystem/TPSAttributeSet.h"
 
 void UHealthBarWidget::SetAbilitySystem(UAbilitySystemComponent* InASC)

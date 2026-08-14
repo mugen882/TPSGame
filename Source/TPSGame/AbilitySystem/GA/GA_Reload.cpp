@@ -25,11 +25,14 @@ void UGA_Reload::ActivateAbility(
 	const FGameplayAbilityActivationInfo ActivationInfo,
 	const FGameplayEventData* TriggerEventData)
 {
-	FGameplayTagContainer FireTags;
-	FireTags.AddTag(TAG_Ability_Fire); // 발사 어빌리티들에 공통으로 붙인 태그
-	GetAbilitySystemComponentFromActorInfo()->CancelAbilities(&FireTags);
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		FGameplayTagContainer FireTags;
+		FireTags.AddTag(TAG_Ability_Fire); // 발사 어빌리티들에 공통으로 붙인 태그
+		ASC->CancelAbilities(&FireTags);
+	}
 
-	ACommonCharacter* Character = Cast<ACommonCharacter>(ActorInfo->AvatarActor.Get());
+	ACommonCharacter* Character = ActorInfo ? Cast<ACommonCharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
 	if (!Character)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -76,7 +79,10 @@ void UGA_Reload::OnMontageEnded(UAnimMontage* Montage, bool bInterrupted)
 	const FGameplayAbilityActivationInfo ActivationInfo = GetCurrentActivationInfo();
 
 	if (bInterrupted)
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
+	}
 
 	ACommonCharacter* Character = Cast<ACommonCharacter>(ActorInfo->AvatarActor.Get());
 	if (!Character)

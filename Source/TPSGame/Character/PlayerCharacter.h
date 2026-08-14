@@ -40,6 +40,9 @@ public:
 
 	virtual void OnReloadFinished() override;
 
+	// 플레이어는 발사가 즉발(ActivateAbility의 FireOnce)이므로 발사 몽타주의 노티파이는 무시한다.
+	virtual void OnFireNotify() override {}
+
 	virtual void PossessedBy(AController* NewController) override;
 
 public:
@@ -54,7 +57,6 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
-	virtual void Tick(float DeltaTime) override;
 	virtual void NotifyControllerChanged() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void OnDamaged(float InDamage) override;
@@ -62,10 +64,10 @@ protected:
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
-	USpringArmComponent* CameraBoom;
+	TObjectPtr<USpringArmComponent> CameraBoom;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
-	UCameraComponent* FollowCamera;
+	TObjectPtr<UCameraComponent> FollowCamera;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon")
 	EWeaponType CurrentWeaponType;

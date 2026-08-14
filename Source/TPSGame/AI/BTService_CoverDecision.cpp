@@ -17,6 +17,8 @@ void UBTService_CoverDecision::TickNode(UBehaviorTreeComponent& OwnerComp, uint8
 {
     Super::TickNode(OwnerComp, NodeMemory, DeltaSeconds);
 
+    FBTCoverDecisionMemory* Mem = reinterpret_cast<FBTCoverDecisionMemory*>(NodeMemory);
+
     UBlackboardComponent* BB = OwnerComp.GetBlackboardComponent();
     AAIController* AICon = OwnerComp.GetAIOwner();
     AEnemyCharacter* Enemy = AICon ? Cast<AEnemyCharacter>(AICon->GetPawn()) : nullptr;
@@ -39,14 +41,14 @@ void UBTService_CoverDecision::TickNode(UBehaviorTreeComponent& OwnerComp, uint8
 
     // 한 번 숨기로 했으면 최소 유지 시간 동안 유지
     const bool bCurrentlyCovering = BB->GetValueAsBool(ShouldTakeCoverKey);
-    if (bCurrentlyCovering && (Now - CoverEnterTime < MinCoverHoldTime))
+    if (bCurrentlyCovering && (Now - Mem->CoverEnterTime < MinCoverHoldTime))
     {
         bWantCover = true;   // 아직 최소 유지 시간 안 지남 → 계속 숨기
     }
 
     if (bWantCover && !bCurrentlyCovering)
     {
-        CoverEnterTime = Now;   // 숨기 시작 시각 기록
+        Mem->CoverEnterTime = Now;   // 숨기 시작 시각 기록 (이 AI 전용)
     }
 
     BB->SetValueAsBool(ShouldTakeCoverKey, bWantCover);

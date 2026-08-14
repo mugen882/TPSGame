@@ -41,6 +41,8 @@ public:
 private:
 	// 클램프 등 사전 처리
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
+	// MaxHealth 변경 시 현재 Health 보정
+	virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
 	// 데미지 적용 후처리 (Health 차감)
 	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 };
