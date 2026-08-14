@@ -1,0 +1,42 @@
+# =========================================================
+#  Unreal Engine 5 .gitignore  (VS project)
+# =========================================================
+
+# --- Auto-generated / build output (재생성 가능, 추적 X) ---
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+
+# --- IDE / editor 파일 ---
+.vs/
+.vscode/
+.idea/
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+
+# --- 생성되는 프로젝트 파일 (uproject는 추적하지만 아래는 제외) ---
+*.opensdf
+*.sln
+
+# --- OS 잡파일 ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- 플러그인 하위 build 폴더도 동일하게 제외 ---
+Plugins/**/Binaries/
+Plugins/**/Intermediate/
+
+# =========================================================
+#  참고:
+#  - Config/ 와 Content/ 는 추적해야 함 (제외하지 말 것)
+#  - *.uproject 는 추적함
+# =========================================================

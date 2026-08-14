@@ -1,0 +1,37 @@
+# =========================================================
+#  Unreal Engine 5 .gitattributes  (VS project)
+#  큰 바이너리 에셋은 Git LFS로 추적
+# =========================================================
+
+# --- UE 코어 바이너리 에셋 ---
+*.uasset filter=lfs diff=lfs merge=lfs -text
+*.umap   filter=lfs diff=lfs merge=lfs -text
+
+# --- 이미지 / 텍스처 ---
+*.png  filter=lfs diff=lfs merge=lfs -text
+*.jpg  filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.tga  filter=lfs diff=lfs merge=lfs -text
+*.psd  filter=lfs diff=lfs merge=lfs -text
+*.exr  filter=lfs diff=lfs merge=lfs -text
+*.hdr  filter=lfs diff=lfs merge=lfs -text
+
+# --- 3D 모델 / 애니메이션 소스 ---
+*.fbx  filter=lfs diff=lfs merge=lfs -text
+*.obj  filter=lfs diff=lfs merge=lfs -text
+
+# --- 오디오 ---
+*.wav  filter=lfs diff=lfs merge=lfs -text
+*.mp3  filter=lfs diff=lfs merge=lfs -text
+*.ogg  filter=lfs diff=lfs merge=lfs -text
+
+# --- 폰트 / 기타 미디어 ---
+*.ttf  filter=lfs diff=lfs merge=lfs -text
+*.otf  filter=lfs diff=lfs merge=lfs -text
+*.mp4  filter=lfs diff=lfs merge=lfs -text
+
+# =========================================================
+#  참고:
+#  - SVG는 텍스트라 LFS로 잡지 않음 (일반 diff가 오히려 유용)
+#  - 텍스트 소스(.cpp .h .cs .ini)는 LFS 대상이 아님
+# =========================================================
