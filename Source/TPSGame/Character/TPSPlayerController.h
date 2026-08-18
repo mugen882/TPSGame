@@ -5,6 +5,7 @@
 #include "TPSPlayerController.generated.h"
 
 class UTPSHUDWidget;
+class UTPSQuitConfirmWidget;
 
 /**
 	HUD 소유/생성을 담당하는 플레이어 컨트롤러.
@@ -18,11 +19,29 @@ class TPSGAME_API ATPSPlayerController : public APlayerController
 public:
 	UTPSHUDWidget* GetHUDWidget() const { return HUDWidget; }
 
+public:
+    UFUNCTION(BlueprintCallable, Category="UI")
+    void CloseQuitConfirm();
+
+    UFUNCTION(BlueprintCallable, Category="UI")
+    void ConfirmQuit();
+
 protected:
+    virtual void SetupInputComponent() override;
+
+    UPROPERTY(EditDefaultsOnly, Category="UI")
+    TSubclassOf<UTPSQuitConfirmWidget> QuitConfirmWidgetClass;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UTPSQuitConfirmWidget> QuitConfirmWidget;
+
 	virtual void OnPossess(APawn* InPawn) override;
 
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<UTPSHUDWidget> HUDClass;
+
+private:
+	void OnPausePressed();
 
 private:
 	UPROPERTY()
