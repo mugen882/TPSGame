@@ -13,7 +13,7 @@ class UGameplayAbility;
 */
 
 UCLASS()
-class UEnemyCombatProfile : public UDataAsset
+class TPSGAME_API UEnemyCombatProfile : public UDataAsset
 {
     GENERATED_BODY()
 public:
