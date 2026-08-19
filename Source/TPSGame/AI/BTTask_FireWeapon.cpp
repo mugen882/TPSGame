@@ -46,7 +46,7 @@ EBTNodeResult::Type UBTTask_FireWeapon::ExecuteTask(UBehaviorTreeComponent& Owne
     const float Dist = FVector::Dist(Enemy->GetActorLocation(), Target->GetActorLocation());
     if (Dist > Enemy->GetAttackRange())
     {
-		UE_LOG(TPSLog, Warning, TEXT("BTTask_FireWeapon: Target out of range (%.1f > %.1f)"), Dist, Enemy->GetAttackRange());
+		//UE_LOG(TPSLog, Warning, TEXT("BTTask_FireWeapon: Target out of range (%.1f > %.1f)"), Dist, Enemy->GetAttackRange());
         // 사거리 밖 → 발사 안 함
         return EBTNodeResult::Succeeded;
     }
