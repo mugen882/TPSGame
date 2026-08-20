@@ -21,12 +21,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAmmoChanged, int32, NewCurrentAm
 	공용 캐릭터 클래스
 	적 / 플레이어의 공통 로직을 담고 있음
 	UAbilitySystemComponent, UTPSAttributeSet을 들고있음
-
-	[네트워크 노트]
-	ASC는 캐릭터에 그대로 둔다. 적(AEnemyCharacter)이 같은 베이스를 쓰는데
-	PlayerState가 없기 때문에, ASC를 PlayerState로 올리면 플레이어/적 경로가 갈라진다.
-	웨이브 디펜스 코옵에서는 리스폰 시 어트리뷰트를 다시 초기화하면 되므로
-	PlayerState 이관의 이점이 크지 않다고 판단.
 */
 
 UCLASS()
@@ -92,26 +86,13 @@ public:
 	FOnAmmoChanged OnAmmoChanged;
 
 protected:
-	// 서버 전용 초기화 경로
 	virtual void PossessedBy(AController* NewController) override;
-
-	// 클라이언트 초기화 경로 — PlayerState가 복제된 시점
-	virtual void OnRep_PlayerState() override;
 
 	virtual void BeginPlay() override;
 
 	virtual void Tick(float DeltaTime) override;
 
-	/*
-		ASC ActorInfo 초기화 + 어트리뷰트 델리게이트 바인딩
-
-		서버(PossessedBy) / 플레이어 클라(OnRep_PlayerState) / AI 프록시(BeginPlay)
-		세 경로에서 모두 호출되며, 중복 호출에 안전하도록 작성했다.
-	*/
-	void InitAbilityActorInfoAndBind(const TCHAR* CallSite);
-
-	// 서버 전용. DefaultAbilities 부여
-	void GrantDefaultAbilities();
+	void InitAbilities();
 
 	bool TargetIsDead(AActor* Actor);
 
@@ -157,7 +138,4 @@ private:
 	TArray<TSubclassOf<class UGameplayAbility>> DefaultAbilities;
 
 	bool bAbilitiesGranted = false;
-
-	// 델리게이트 중복 바인딩 방지
-	bool bAttributeDelegatesBound = false;
 };

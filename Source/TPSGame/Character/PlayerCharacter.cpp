@@ -19,7 +19,7 @@
 
 APlayerCharacter::APlayerCharacter()
 {
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 
     CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
     CameraBoom->SetupAttachment(RootComponent);
@@ -45,24 +45,6 @@ APlayerCharacter::APlayerCharacter()
     GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
 
     AimComponent = CreateDefaultSubobject<UPlayerAimComponent>(TEXT("AimComponent"));
-
-    /*
-        [M0] 플레이어만 Mixed로 승격
-
-        Mixed: 소유 클라이언트에게는 GameplayEffect를 온전히 복제하고,
-               나머지 클라에게는 GameplayTag와 GameplayCue만 복제한다.
-
-        플레이어는 자기 버프/디버프의 남은 시간, 스택 수 등을 UI로 봐야 하므로
-        Mixed가 필요하다. 반대로 남의 캐릭터에 걸린 GE 세부 정보는 알 필요가 없어
-        대역폭을 아낀다.
-
-        주의: Mixed는 ASC의 OwnerActor가 유효한 커넥션에 소유되어 있어야 한다.
-              여기서는 PlayerController가 캐릭터를 소유하므로 조건을 만족한다.
-    */
-    if (AbilitySystemComponent)
-    {
-        AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
-    }
 }
 
 void APlayerCharacter::BeginPlay()
@@ -73,14 +55,6 @@ void APlayerCharacter::BeginPlay()
         AimComponent->SetupCameraRefs(CameraBoom, FollowCamera);
 }
 
-void APlayerCharacter::Tick(float DeltaTime)
-{
-    Super::Tick(DeltaTime);
-
-    if (AimComponent)
-        AimComponent->UpdateCameraInterpolation(DeltaTime);
-}
-
 void APlayerCharacter::NotifyControllerChanged()
 {
     Super::NotifyControllerChanged();
@@ -89,7 +63,11 @@ void APlayerCharacter::NotifyControllerChanged()
     {
         if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
         {
-            Subsystem->AddMappingContext(DefaultMappingContext, 0);
+            if (DefaultMappingContext)
+            {
+                Subsystem->RemoveMappingContext(DefaultMappingContext);
+                Subsystem->AddMappingContext(DefaultMappingContext, 0);
+            }
         }
     }
 }
@@ -153,26 +131,10 @@ void APlayerCharacter::HandleDeath()
 {
     Super::HandleDeath();   // 공통 래그돌 + State.Dead 태그
 
-    // 입력 차단.
-    // 시뮬레이티드 프록시(남의 캐릭터)에서는 GetController()가 null이므로 자연히 건너뛴다.
+    // 입력 차단
     if (APlayerController* PC = Cast<APlayerController>(GetController()))
     {
         DisableInput(PC);
-    }
-
-    /*
-        [M0] 레벨 재시작은 서버에서만.
-
-        HandleDeath는 이제 어트리뷰트 복제를 타고 모든 머신에서 호출되므로,
-        게이트가 없으면 클라이언트가 자기 혼자 OpenLevel을 호출해 세션에서 튕긴다.
-
-        TODO(M3): 웨이브 디펜스 코옵에서는 레벨 재시작이 아니라
-                  GameMode 주도 리스폰(RestartPlayer)으로 교체한다.
-                  전원 사망 시에만 게임오버 처리.
-    */
-    if (!HasAuthority())
-    {
-        return;
     }
 
     // 3초 후 레벨 재시작

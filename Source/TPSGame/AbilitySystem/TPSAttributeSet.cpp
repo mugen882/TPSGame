@@ -1,7 +1,6 @@
 #include "AbilitySystem/TPSAttributeSet.h"
 #include "GameplayEffectExtension.h"
 #include "Character/CommonCharacter.h"
-#include "Net/UnrealNetwork.h"
 
 UTPSAttributeSet::UTPSAttributeSet()
 {
@@ -14,36 +13,6 @@ void UTPSAttributeSet::InitializeAttributes(float NewHealth)
 	InitMaxHealth(NewHealth);
 }
 
-void UTPSAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	/*
-		REPNOTIFY_Always를 쓰는 이유
-
-		기본값(REPNOTIFY_OnChanged)은 "복제된 값이 클라 로컬 값과 다를 때만" OnRep을 호출한다.
-		그런데 GAS는 클라가 어빌리티를 예측 실행하면서 어트리뷰트를 미리 바꿔놓는 경우가 많다.
-		이때 서버 값이 도착해도 이미 같은 값이라 OnRep이 생략되고,
-		결과적으로 ASC의 어트리뷰트 변경 델리게이트가 발화하지 않아 UI가 멈춘다.
-
-		Always로 두면 예측이 맞았든 롤백됐든 항상 갱신 경로를 타므로 안전하다.
-	*/
-	DOREPLIFETIME_CONDITION_NOTIFY(UTPSAttributeSet, Health, COND_None, REPNOTIFY_Always);
-	DOREPLIFETIME_CONDITION_NOTIFY(UTPSAttributeSet, MaxHealth, COND_None, REPNOTIFY_Always);
-}
-
-void UTPSAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth)
-{
-	// ASC에 변경을 통지해 GetGameplayAttributeValueChangeDelegate 구독자들을 깨운다.
-	// (ACommonCharacter::HandleHealthChanged, UHealthBarWidget 등)
-	GAMEPLAYATTRIBUTE_REPNOTIFY(UTPSAttributeSet, Health, OldHealth);
-}
-
-void UTPSAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth)
-{
-	GAMEPLAYATTRIBUTE_REPNOTIFY(UTPSAttributeSet, MaxHealth, OldMaxHealth);
-}
-
 void UTPSAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	Super::PreAttributeChange(Attribute, NewValue);
@@ -52,14 +21,29 @@ void UTPSAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, f
 	{
 		NewValue = FMath::Clamp(NewValue, 0.0f, GetMaxHealth());
 	}
+	else if (Attribute == GetMaxHealthAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 1.0f);
+	}
+}
+
+void UTPSAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
+{
+	Super::PostAttributeChange(Attribute, OldValue, NewValue);
+
+	// MaxHealth가 줄어들면 현재 Health가 그 위로 남지 않도록 함께 낮춘다.
+	if (Attribute == GetMaxHealthAttribute() && GetHealth() > NewValue)
+	{
+		if (UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent())
+		{
+			ASC->SetNumericAttributeBase(GetHealthAttribute(), NewValue);
+		}
+	}
 }
 
 void UTPSAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
 {
 	Super::PostGameplayEffectExecute(Data);
-
-	// 이 함수는 GE가 실제로 "실행"되는 머신에서만 호출된다.
-	// Instant GE는 서버에서만 실행되므로 사실상 서버 전용 경로다.
 
 	// 데미지 메타 어트리뷰트로 들어온 값을 Health에서 차감
 	if (Data.EvaluatedData.Attribute == GetDamageAttribute())
