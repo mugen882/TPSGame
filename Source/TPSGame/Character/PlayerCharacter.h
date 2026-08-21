@@ -86,6 +86,10 @@ private:
 	void StopFire();
 
 	void OnReloadInput();
+
+	// 무기 교체 어빌리티 활성화 (GA_SwapWeapon)
+	void TryActivateSwapAbility(const FGameplayTag& InputTag);
+
 	void ChangeRifle();
 	void ChangeRocketLauncher();
 	void ChangeMachineGun();

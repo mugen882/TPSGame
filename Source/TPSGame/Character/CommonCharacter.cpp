@@ -43,7 +43,7 @@ void ACommonCharacter::InitAbilityActorInfoAndBind(const TCHAR* CallSite)
     if (!AbilitySystemComponent || !AttributeSet)
     {
         UE_LOG(TPSLog, Error, TEXT("%s InitAbilityActorInfo SKIPPED (from %s) — ASC=%s, AttributeSet=%s"),
-            *TPSNetPrefix(this), CallSite,
+            *TPSNetDebug::TPSNetPrefix(this), CallSite,
             AbilitySystemComponent ? TEXT("OK") : TEXT("NULL"),
             AttributeSet ? TEXT("OK") : TEXT("NULL"));
         return;
@@ -61,13 +61,13 @@ void ACommonCharacter::InitAbilityActorInfoAndBind(const TCHAR* CallSite)
         bAttributeDelegatesBound = true;
 
         UE_LOG(TPSLog, Verbose, TEXT("%s InitAbilityActorInfo (from %s) — delegates BOUND, Health=%.1f/%.1f"),
-            *TPSNetPrefix(this), CallSite,
+            *TPSNetDebug::TPSNetPrefix(this), CallSite,
             AttributeSet->GetHealth(), AttributeSet->GetMaxHealth());
     }
     else
     {
         UE_LOG(TPSLog, Verbose, TEXT("%s InitAbilityActorInfo (from %s) — delegates skip, Health=%.1f/%.1f"),
-            *TPSNetPrefix(this), CallSite,
+            *TPSNetDebug::TPSNetPrefix(this), CallSite,
             AttributeSet->GetHealth(), AttributeSet->GetMaxHealth());
     }
 }
@@ -240,13 +240,13 @@ void ACommonCharacter::GrantDefaultAbilities()
     bAbilitiesGranted = true;
 
     UE_LOG(TPSLog, Verbose, TEXT("%s GrantDefaultAbilities — %d개 부여"),
-        *TPSNetPrefix(this), DefaultAbilities.Num());
+        *TPSNetDebug::TPSNetPrefix(this), DefaultAbilities.Num());
 }
 
 void ACommonCharacter::HandleHealthChanged(const FOnAttributeChangeData& Data)
 {
-    // [M0] 이제 서버뿐 아니라 클라이언트에서도 호출된다.
-    //      (AttributeSet 리플리케이션 + OnRep -> ASC 델리게이트 발화)
+    // 이제 서버뿐 아니라 클라이언트에서도 호출된다.
+    // (AttributeSet 리플리케이션 + OnRep -> ASC 델리게이트 발화)
     if (Data.NewValue < Data.OldValue)   // 피격
     {
         if (AttributeSet->GetHealth() <= 0.0f)

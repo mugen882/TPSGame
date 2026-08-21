@@ -9,6 +9,10 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_Input_Reload, "Input.Reload");					// 재장전 입�
 UE_DEFINE_GAMEPLAY_TAG(TAG_Input_Fire_Rifle, "Input.Fire.Rifle");			// 소총 발사 입력
 UE_DEFINE_GAMEPLAY_TAG(TAG_Input_Fire_RocketLauncher, "Input.Fire.RocketLauncher");	// 로켓런처 발사 입력
 UE_DEFINE_GAMEPLAY_TAG(TAG_Input_Fire_MachineGun, "Input.Fire.MachineGun");	// 기관총 발사 입력
+UE_DEFINE_GAMEPLAY_TAG(TAG_Input_Swap_Rifle, "Input.Swap.Rifle");				// 소총 교체 입력
+UE_DEFINE_GAMEPLAY_TAG(TAG_Input_Swap_RocketLauncher, "Input.Swap.RocketLauncher");	// 로켓런처 교체 입력
+UE_DEFINE_GAMEPLAY_TAG(TAG_Input_Swap_MachineGun, "Input.Swap.MachineGun");		// 기관총 교체 입력
+UE_DEFINE_GAMEPLAY_TAG(TAG_Event_WeaponSwap, "Event.WeaponSwap");		// 교체 몽타주 노티파이가 보내는 이벤트(실제 교체 타이밍)
 UE_DEFINE_GAMEPLAY_TAG(TAG_Cooldown_Fire, "Cooldown.Fire");		// 발사 쿨다운(쿨다운 지속시간 만큼 유지)
 UE_DEFINE_GAMEPLAY_TAG(TAG_Data_Damage, "Data.Damage");			// 데미지
 UE_DEFINE_GAMEPLAY_TAG(TAG_Data_CooldownDuration, "Data.CooldownDuration");	// 쿨다운 지속시간

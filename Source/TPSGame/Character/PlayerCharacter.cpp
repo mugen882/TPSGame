@@ -47,7 +47,7 @@ APlayerCharacter::APlayerCharacter()
     AimComponent = CreateDefaultSubobject<UPlayerAimComponent>(TEXT("AimComponent"));
 
     /*
-        [M0] 플레이어만 Mixed로 승격
+        플레이어만 Mixed로 승격
 
         Mixed: 소유 클라이언트에게는 GameplayEffect를 온전히 복제하고,
                나머지 클라에게는 GameplayTag와 GameplayCue만 복제한다.
@@ -161,7 +161,7 @@ void APlayerCharacter::HandleDeath()
     }
 
     /*
-        [M0] 레벨 재시작은 서버에서만.
+        레벨 재시작은 서버에서만.
 
         HandleDeath는 이제 어트리뷰트 복제를 타고 모든 머신에서 호출되므로,
         게이트가 없으면 클라이언트가 자기 혼자 OpenLevel을 호출해 세션에서 튕긴다.
@@ -226,25 +226,38 @@ void APlayerCharacter::OnReloadInput()
     AbilitySystemComponent->TryActivateAbilitiesByTag(FGameplayTagContainer(TAG_Input_Reload));
 }
 
+/*
+    무기 교체 입력
+
+    직접 EquipWeapon을 부르지 않고 GA_SwapWeapon을 활성화한다.
+    TryActivateAbilitiesByTag는 LocalPredicted 어빌리티에 대해
+    소유 클라 실행 + 서버로 ServerTryActivateAbility 전송을 함께 처리하므로
+    별도의 RPC가 필요 없다.
+
+    무기 종류는 "어떤 스펙이 활성화됐는가"로 전달된다.
+    (BP 자식마다 TargetWeaponType과 InputTag를 다르게 설정)
+*/
+void APlayerCharacter::TryActivateSwapAbility(const FGameplayTag& InputTag)
+{
+    if (!AbilitySystemComponent) return;
+    if (IsDead() || IsReloading() || IsSwapping()) return;
+
+    AbilitySystemComponent->TryActivateAbilitiesByTag(FGameplayTagContainer(InputTag));
+}
+
 void APlayerCharacter::ChangeRifle()
 {
-    if (GetWeaponManager() == nullptr) return;
-
-    GetWeaponManager()->EquipWeapon(EWeaponType::Rifle);
+    TryActivateSwapAbility(TAG_Input_Swap_Rifle);
 }
 
 void APlayerCharacter::ChangeRocketLauncher()
 {
-    if (GetWeaponManager() == nullptr) return;
-
-    GetWeaponManager()->EquipWeapon(EWeaponType::RocketLauncher);
+    TryActivateSwapAbility(TAG_Input_Swap_RocketLauncher);
 }
 
 void APlayerCharacter::ChangeMachineGun()
 {
-    if (GetWeaponManager() == nullptr) return;
-
-    GetWeaponManager()->EquipWeapon(EWeaponType::MachineGun);
+    TryActivateSwapAbility(TAG_Input_Swap_MachineGun);
 }
 
 void APlayerCharacter::DoJump()
@@ -289,7 +302,11 @@ void APlayerCharacter::EquipInitialWeapon()
 
     if (WeaponManager->GetWeapons().Num() > 0)
     {
-        GetWeaponManager()->DoEquipWeapon(EWeaponType::Rifle);
+        // 서버에서만 기록. 클라는 OnRep_CurrentWeaponType으로 따라온다.
+        if (HasAuthority())
+        {
+            GetWeaponManager()->ApplyWeaponType(EWeaponType::Rifle);
+        }
     }
 }
 

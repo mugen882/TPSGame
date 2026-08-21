@@ -28,12 +28,17 @@ public:
     const TMap<EWeaponType, AWeaponBase*>& GetWeapons() const { return Weapons; }
     AWeaponBase* GetWeapon(EWeaponType WeaponType) const { return Weapons.FindRef(WeaponType); }
 
-    void SetCurrentWeapon(EWeaponType WeaponType);  // visible 토글 포함
+    /*
+     이 함수는 OnRep 경로에서도 불리므로 순수 로컬 반영만 담당한다.
+     Weapon visible 변경 포함
+    */
+    void SetCurrentWeapon(EWeaponType WeaponType);
 
-    void EquipWeapon(EWeaponType WeaponType);
-    void DoEquipWeapon(EWeaponType WeaponType);
-    void EquipWeaponByClass(TSubclassOf<AWeaponBase> WeaponClass);
-    void OnWeaponSwapNotify();
+    void ApplyWeaponType(EWeaponType WeaponType);
+
+    // 어빌리티를 거치지 않는 서버 권위 경로
+    void ServerEquipWeaponByClass(TSubclassOf<AWeaponBase> WeaponClass);
+
     const FGameplayTagContainer& GetWeaponFireTag() const { return WeaponFireTag; }
 
 protected:
@@ -43,19 +48,33 @@ protected:
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon")
     TMap<EWeaponType, AWeaponBase*> Weapons;
 
+    /*
+        CurrentWeapon / Weapons 는 복제하지 않는다.
+
+        탄약이 어트리뷰트로 이관되면(M2a) 무기 액터가 들고 있는 값은
+        전부 BP CDO에서 오는 설정값뿐이라 모든 머신이 이미 동일하게 가지고 있다.
+        따라서 무기 액터를 복제할 이유가 없고, 각 머신이 로컬로 스폰한 뒤
+        '어떤 종류를 들고 있는가'만 1바이트로 복제하면 충분하다.
+        (4인 코옵 기준 액터 채널 12개를 아낀다)
+    */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon")
     TObjectPtr<AWeaponBase> CurrentWeapon = nullptr;
 
+    UPROPERTY(ReplicatedUsing = OnRep_CurrentWeaponType)
     EWeaponType CurrentWeaponType = EWeaponType::None;
+
+protected:
+    UFUNCTION()
+    void OnRep_CurrentWeaponType();
+
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 private:
     ACommonCharacter* GetOwnerCharacter() const;
-    void OnSwapMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
+    // 순수 로컬 반영 — 메시 가시성, 발사 입력 태그, UI 브로드캐스트
+    void ApplyWeaponTypeLocally();
 
 private:
-    UPROPERTY(EditAnywhere, Category="Weapon")
-    TObjectPtr<UAnimMontage> WeaponSwapMontage;
-
     FGameplayTagContainer WeaponFireTag;
-    EWeaponType PendingWeaponType = EWeaponType::None;
 };

@@ -1,37 +1,45 @@
 #include "Common/TPSLog.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/GameStateBase.h"
 
 DEFINE_LOG_CATEGORY(TPSLog);
 
-FString TPSNetPrefix(const AActor* Actor)
+namespace TPSNetDebug
 {
-    if (!Actor)
+    FString TPSNetPrefix(const AActor* Actor)
     {
-        return TEXT("[null]");
+        if (!Actor)
+        {
+            return TEXT("[null]");
+        }
+
+        const TCHAR* AuthStr = Actor->HasAuthority() ? TEXT("SV") : TEXT("CL");
+
+        const TCHAR* RoleStr = NetRoleToString(Actor->GetLocalRole());
+
+        const TCHAR* ModeStr = NetModeToString(Actor->GetNetMode());
+
+        return FString::Printf(TEXT("[%s|%s|%s] %s"),
+            AuthStr, RoleStr, ModeStr, *Actor->GetName());
     }
 
-    const TCHAR* AuthStr = Actor->HasAuthority() ? TEXT("SV") : TEXT("CL");
-
-    const TCHAR* RoleStr = TEXT("?");
-    switch (Actor->GetLocalRole())
+    FString DescribeNet(const AActor* Actor)
     {
-    case ROLE_Authority:       RoleStr = TEXT("Authority");  break;
-    case ROLE_AutonomousProxy: RoleStr = TEXT("Autonomous"); break;
-    case ROLE_SimulatedProxy:  RoleStr = TEXT("Simulated");  break;
-    case ROLE_None:            RoleStr = TEXT("None");       break;
-    default: break;
+        if (!Actor) return TEXT("NoActor");
+        return FString::Printf(TEXT("%s|%s"),
+            NetModeToString(Actor->GetNetMode()),
+            NetRoleToString(Actor->GetLocalRole()));
     }
 
-    const TCHAR* ModeStr = TEXT("?");
-    switch (Actor->GetNetMode())
+    double GetSyncedTime(const AActor* Actor)
     {
-    case NM_Standalone:      ModeStr = TEXT("Standalone"); break;
-    case NM_DedicatedServer: ModeStr = TEXT("DedServer");  break;
-    case NM_ListenServer:    ModeStr = TEXT("Listen");     break;
-    case NM_Client:          ModeStr = TEXT("Client");     break;
-    default: break;
+        if (!Actor) return 0.0;
+        const UWorld* World = Actor->GetWorld();
+        if (!World) return 0.0;
+        if (const AGameStateBase* GS = World->GetGameState())
+        {
+            return GS->GetServerWorldTimeSeconds();
+        }
+        return World->GetTimeSeconds();
     }
-
-    return FString::Printf(TEXT("[%s|%s|%s] %s"),
-        AuthStr, RoleStr, ModeStr, *Actor->GetName());
 }

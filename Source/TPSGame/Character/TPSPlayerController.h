@@ -37,11 +37,17 @@ protected:
 
 	virtual void OnPossess(APawn* InPawn) override;
 
+	// 클라이언트 경로 — OnPossess는 서버 전용이라 원격 클라는 여기로 온다.
+	virtual void AcknowledgePossession(APawn* InPawn) override;
+
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<UTPSHUDWidget> HUDClass;
 
 private:
 	void OnPausePressed();
+
+	// 서버/클라 공용 HUD 셋업
+	void SetupHUDFor(APawn* InPawn);
 
 private:
 	UPROPERTY()

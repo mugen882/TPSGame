@@ -70,7 +70,8 @@ void UEnemyCombatComponent::ApplyCombatProfile(UEnemyCombatProfile* Profile)
     {
         if (UWeaponManagerComponent* WM = Owner->GetWeaponManager())
         {
-            WM->EquipWeaponByClass(Profile->WeaponClass);
+            // AI는 서버에서만 프로필을 고르므로 어빌리티를 거치지 않는다.
+            WM->ServerEquipWeaponByClass(Profile->WeaponClass);
             if (AWeaponBase* Wpn = WM->GetCurrentWeapon())
             {
                 Wpn->SetDamage(Wpn->GetBaseDamage() * DamageMul);
