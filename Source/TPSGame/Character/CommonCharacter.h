@@ -76,6 +76,20 @@ public:
 
 	void BroadcastAmmo();
 
+	/*
+		현재 무기의 탄약 조회.
+
+		탄약이 UTPSAttributeSet으로 이관되었으므로 무기 액터가 아니라 ASC에서 읽는다.
+		호출부(TryFire, GA_Reload, 머신건 연사 루프, BT)가 무기 종류를 몰라도 되도록
+		무기의 GetAmmoAttribute()를 경유한다.
+	*/
+	int32 GetCurrentWeaponAmmo();
+	bool  HasCurrentWeaponAmmo();
+	bool  IsCurrentWeaponAmmoFull();
+
+	// 서버 전용. 소유한 모든 무기의 탄약을 MaxAmmo로 초기화한다.
+	void InitAmmoAttributes();
+
 	FORCEINLINE UTPSAttributeSet* GetAttributeSet() { return AttributeSet; }
 
 public:
@@ -118,6 +132,9 @@ protected:
 	virtual void HandleDeath();
 
 	virtual void HandleHealthChanged(const struct FOnAttributeChangeData& Data);
+
+	// 탄약 어트리뷰트 변경 → 탄약 UI 갱신 (예측 차감과 서버 확정 양쪽에서 발화)
+	void HandleAmmoChanged(const struct FOnAttributeChangeData& Data);
 
 	virtual void OnDamaged(float InDamage)
 		PURE_VIRTUAL(ACommonCharacter::OnDamaged, );

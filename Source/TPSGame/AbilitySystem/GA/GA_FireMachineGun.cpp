@@ -65,7 +65,7 @@ void UGA_FireMachineGun::FireLoop()
     }
 
     // 탄약 0 → 자동 리로드 시도
-    if (!Weapon->HasAmmo())
+    if (!Char->HasCurrentWeaponAmmo())
     {
         // 이미 리로드 중이면 대기 (루프는 계속 돌며 HasAmmo 체크)
         if (!Char->IsReloading())

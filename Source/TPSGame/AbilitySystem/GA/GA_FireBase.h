@@ -26,6 +26,17 @@ protected:
         const FGameplayAbilityActivationInfo ActivationInfo,
         const FGameplayEventData* TriggerEventData) override;
 
+    // 무기의 bInfiniteAmmo 설정을 Cost 파이프라인에 연결
+    virtual bool CheckCost(
+        const FGameplayAbilitySpecHandle Handle,
+        const FGameplayAbilityActorInfo* ActorInfo,
+        OUT FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+
+    virtual void ApplyCost(
+        const FGameplayAbilitySpecHandle Handle,
+        const FGameplayAbilityActorInfo* ActorInfo,
+        const FGameplayAbilityActivationInfo ActivationInfo) const override;
+
     // 쿨다운 GE를 무기 FireInterval(SetByCaller)로 적용
     virtual void ApplyCooldown(
         const FGameplayAbilitySpecHandle Handle,

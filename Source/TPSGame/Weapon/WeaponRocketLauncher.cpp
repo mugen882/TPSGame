@@ -1,9 +1,9 @@
 #include "Weapon/WeaponRocketLauncher.h"
 #include "Projectile.h"
+#include "AbilitySystem/TPSAttributeSet.h"
 
 AWeaponRocketLauncher::AWeaponRocketLauncher()
 {
-	CurrentAmmo = MaxAmmo = 2;
 	FireInterval = 1.5f;
 	Damage = 50.f;
 }
@@ -37,4 +37,9 @@ bool AWeaponRocketLauncher::FireInternal(const FVector& AimPoint, AController* I
 	}
 
 	return Proj != nullptr;
+}
+
+FGameplayAttribute AWeaponRocketLauncher::GetAmmoAttribute() const
+{
+	return UTPSAttributeSet::GetRocketAmmoAttribute();
 }

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "AttributeSet.h"
 #include "WeaponBase.generated.h"
 
 class USkeletalMeshComponent;
@@ -24,18 +25,22 @@ class TPSGAME_API AWeaponBase : public AActor
 public:
 	AWeaponBase();
 
-	// 발사 시도. 가능하면 발사하고 true 반환 (탄약 차감 포함)
+	// 발사 시도. 실제 발사가 이뤄졌으면 true.
+	// 탄약 검사/차감은 더 이상 여기서 하지 않는다 (GAS Cost GE가 처리).
 	bool Fire(const FVector& AimPoint, AController* InstigatorController);
 
-	bool CanFire() const;
-	bool HasAmmo() const { return CurrentAmmo > 0; }
-	bool IsAmmoFull() const { return CurrentAmmo >= MaxAmmo; }
+	/*
+		이 무기가 소비하는 탄약 어트리뷰트.
 
-	void Reload();
+		탄약이 UTPSAttributeSet으로 이관되면서, "어떤 탄약 풀을 쓰는가"를
+		무기 자신이 알려주도록 했다.
+	*/
+	virtual FGameplayAttribute GetAmmoAttribute() const;
+
+	FORCEINLINE bool IsInfiniteAmmo() const { return bInfiniteAmmo; }
 
 	FVector GetMuzzleLocation() const;
 
-	int32 GetCurrentAmmo() const { return CurrentAmmo; }
 	int32 GetMaxAmmo() const { return MaxAmmo; }
 
 	void SetWeaponVisible(bool bVisible);
@@ -82,8 +87,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Ammo")
 	int32 MaxAmmo = 30;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Weapon|Ammo")
-	int32 CurrentAmmo = 30;
 
 	// 발사 간격
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")

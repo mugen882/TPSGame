@@ -354,7 +354,7 @@ void APlayerCharacter::TryFire()
 
     AWeaponBase* CurrentWeapon = WeaponManager->GetCurrentWeapon();
     // 탄약 없으면 발사 대신 리로드
-    if (CurrentWeapon && !CurrentWeapon->HasAmmo())
+    if (CurrentWeapon && !HasCurrentWeaponAmmo())
     {
         AbilitySystemComponent->TryActivateAbilitiesByTag(FGameplayTagContainer(TAG_Input_Reload));
         return;

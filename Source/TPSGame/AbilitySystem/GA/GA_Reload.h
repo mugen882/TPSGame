@@ -23,8 +23,15 @@ protected:
 		const FGameplayEventData* TriggerEventData) override;
 
 private:
+	// UAbilityTask_PlayMontageAndWait 델리게이트 (파라미터 없음)
 	UFUNCTION()
-	void OnMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+	void OnReloadMontageCompleted();
+
+	UFUNCTION()
+	void OnReloadMontageCancelled();
+
+	// 서버에서만 탄약을 채운다.
+	void FinishReload();
 
 private:
 	UPROPERTY(EditDefaultsOnly, Category = "Reload")
