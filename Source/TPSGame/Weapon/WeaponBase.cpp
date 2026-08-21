@@ -30,21 +30,15 @@ void AWeaponBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	CurrentAmmo = MaxAmmo;
 }
 
-bool AWeaponBase::CanFire() const
+FGameplayAttribute AWeaponBase::GetAmmoAttribute() const
 {
-	return HasAmmo();
+	return FGameplayAttribute();
 }
 
 bool AWeaponBase::Fire(const FVector& AimPoint, AController* InstigatorController)
 {
-	if (!CanFire())
-	{
-		return false;
-	}
-
 	if (!FireInternal(AimPoint, InstigatorController))
 	{
 		// 실제 발사가 이뤄지지 않았으면 탄약/연출을 소모하지 않는다.
@@ -53,11 +47,6 @@ bool AWeaponBase::Fire(const FVector& AimPoint, AController* InstigatorControlle
 
 	ShowMuzzleFlash();
 	PlayFireSound();
-
-	if (!bInfiniteAmmo)
-	{
-		--CurrentAmmo;
-	}
 
 	return true;
 }
@@ -116,7 +105,3 @@ void AWeaponBase::PlayFireSound()
 	);
 }
 
-void AWeaponBase::Reload()
-{
-	CurrentAmmo = MaxAmmo;
-}

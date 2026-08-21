@@ -21,6 +21,9 @@ public:
 
 	TSubclassOf<AProjectile> GetProjectileClass() { return ProjectileClass; }
 
+public:
+	virtual FGameplayAttribute GetAmmoAttribute() const override;
+
 protected:
 	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController) override;
 

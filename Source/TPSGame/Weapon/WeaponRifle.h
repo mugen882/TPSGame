@@ -19,6 +19,9 @@ class TPSGAME_API AWeaponRifle : public AWeaponBase
 public:
 	AWeaponRifle();
 
+public:
+	virtual FGameplayAttribute GetAmmoAttribute() const override;
+
 protected:
 	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController) override;
 };

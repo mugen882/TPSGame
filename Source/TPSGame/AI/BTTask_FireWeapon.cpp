@@ -9,6 +9,7 @@
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Common/AIBlackboardKeys.h"
 #include "Common/TPSLog.h"
+#include "Common/TPSGameplayTags.h"
 
 UBTTask_FireWeapon::UBTTask_FireWeapon()
 {
@@ -48,6 +49,16 @@ EBTNodeResult::Type UBTTask_FireWeapon::ExecuteTask(UBehaviorTreeComponent& Owne
     {
 		//UE_LOG(TPSLog, Warning, TEXT("BTTask_FireWeapon: Target out of range (%.1f > %.1f)"), Dist, Enemy->GetAttackRange());
         // 사거리 밖 → 발사 안 함
+        return EBTNodeResult::Succeeded;
+    }
+
+    // 탄약이 없으면 발사 대신 재장전.
+    if (!Enemy->HasCurrentWeaponAmmo())
+    {
+        if (!Enemy->IsReloading())
+        {
+            ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(TAG_Input_Reload));
+        }
         return EBTNodeResult::Succeeded;
     }
 

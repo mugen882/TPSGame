@@ -2,6 +2,7 @@
 #include "GameplayEffectExtension.h"
 #include "Character/CommonCharacter.h"
 #include "Net/UnrealNetwork.h"
+#include "Common/TPSLog.h"
 
 UTPSAttributeSet::UTPSAttributeSet()
 {
@@ -30,6 +31,17 @@ void UTPSAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	*/
 	DOREPLIFETIME_CONDITION_NOTIFY(UTPSAttributeSet, Health, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UTPSAttributeSet, MaxHealth, COND_None, REPNOTIFY_Always);
+
+	/*
+		탄약은 COND_OwnerOnly.
+
+		Health와 달리 남의 탄약은 누구도 볼 필요가 없다. 적 캐릭터는 소유 커넥션이
+		아예 없으므로 탄약이 네트워크로 나가지 않는다.
+		4인 코옵이면 이 조건 하나로 탄약 트래픽이 1/4로 줄어든다.
+	*/
+	DOREPLIFETIME_CONDITION_NOTIFY(UTPSAttributeSet, RifleAmmo, COND_OwnerOnly, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UTPSAttributeSet, MachineGunAmmo, COND_OwnerOnly, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UTPSAttributeSet, RocketAmmo, COND_OwnerOnly, REPNOTIFY_Always);
 }
 
 void UTPSAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth)
@@ -44,6 +56,23 @@ void UTPSAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealt
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UTPSAttributeSet, MaxHealth, OldMaxHealth);
 }
 
+void UTPSAttributeSet::OnRep_RifleAmmo(const FGameplayAttributeData& OldValue)
+{
+	UE_LOG(TPSLog, Warning, TEXT("OnRep_RifleAmmo %.0f -> %.0f"),
+		OldValue.GetCurrentValue(), GetRifleAmmo());
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UTPSAttributeSet, RifleAmmo, OldValue);
+}
+
+void UTPSAttributeSet::OnRep_MachineGunAmmo(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UTPSAttributeSet, MachineGunAmmo, OldValue);
+}
+
+void UTPSAttributeSet::OnRep_RocketAmmo(const FGameplayAttributeData& OldValue)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UTPSAttributeSet, RocketAmmo, OldValue);
+}
+
 void UTPSAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	Super::PreAttributeChange(Attribute, NewValue);
@@ -51,6 +80,19 @@ void UTPSAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, f
 	if (Attribute == GetHealthAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.0f, GetMaxHealth());
+	}
+
+	/*
+		탄약 하한만 여기서 막는다.
+		상한(MaxAmmo)은 무기 BP의 설정값이라 AttributeSet이 알 수 없다.
+		AttributeSet이 WeaponManager를 들여다보면 계층이 뒤집히므로,
+		상한 클램프는 값을 아는 쪽(재장전 시점)에서 처리한다.
+	*/
+	else if (Attribute == GetRifleAmmoAttribute()
+		|| Attribute == GetMachineGunAmmoAttribute()
+		|| Attribute == GetRocketAmmoAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.0f);
 	}
 }
 

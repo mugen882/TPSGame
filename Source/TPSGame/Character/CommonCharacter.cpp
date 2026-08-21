@@ -58,6 +58,17 @@ void ACommonCharacter::InitAbilityActorInfoAndBind(const TCHAR* CallSite)
         AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetHealthAttribute())
             .AddUObject(this, &ACommonCharacter::HandleHealthChanged);
 
+        /*
+            탄약 UI는 이제 델리게이트로 자동 갱신된다.
+            예측 차감(클라 즉시)과 서버 확정(OnRep) 양쪽에서 발화함
+        */
+        AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetRifleAmmoAttribute())
+            .AddUObject(this, &ACommonCharacter::HandleAmmoChanged);
+        AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetMachineGunAmmoAttribute())
+            .AddUObject(this, &ACommonCharacter::HandleAmmoChanged);
+        AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetRocketAmmoAttribute())
+            .AddUObject(this, &ACommonCharacter::HandleAmmoChanged);
+
         bAttributeDelegatesBound = true;
 
         UE_LOG(TPSLog, Verbose, TEXT("%s InitAbilityActorInfo (from %s) — delegates BOUND, Health=%.1f/%.1f"),
@@ -215,6 +226,9 @@ void ACommonCharacter::SpawnWeapons()
     }
 
     EquipInitialWeapon();
+
+    // 무기가 준비된 뒤에야 MaxAmmo를 알 수 있으므로 여기서 초기화한다.
+    InitAmmoAttributes();
 }
 
 void ACommonCharacter::Tick(float DeltaTime)
@@ -269,6 +283,60 @@ void ACommonCharacter::HandleWeaponHitConfirmed()
     OnHitConfirmed.Broadcast();
 }
 
+int32 ACommonCharacter::GetCurrentWeaponAmmo()
+{
+    AWeaponBase* Weapon = GetCurrentWeapon();
+    if (!Weapon || !AbilitySystemComponent) return 0;
+
+    const FGameplayAttribute Attr = Weapon->GetAmmoAttribute();
+    if (!Attr.IsValid()) return 0;
+
+    return FMath::RoundToInt(AbilitySystemComponent->GetNumericAttribute(Attr));
+}
+
+bool ACommonCharacter::HasCurrentWeaponAmmo()
+{
+    AWeaponBase* Weapon = GetCurrentWeapon();
+    if (!Weapon) return false;
+
+    // 무한 탄약 무기는 항상 발사 가능
+    if (Weapon->IsInfiniteAmmo()) return true;
+
+    return GetCurrentWeaponAmmo() > 0;
+}
+
+bool ACommonCharacter::IsCurrentWeaponAmmoFull()
+{
+    AWeaponBase* Weapon = GetCurrentWeapon();
+    if (!Weapon) return true;
+
+    if (Weapon->IsInfiniteAmmo()) return true;
+
+    return GetCurrentWeaponAmmo() >= Weapon->GetMaxAmmo();
+}
+
+void ACommonCharacter::InitAmmoAttributes()
+{
+    // 탄약의 원본은 서버다. 클라는 복제로 받는다.
+    if (!HasAuthority() || !AbilitySystemComponent || !WeaponManager) return;
+
+    for (const TPair<EWeaponType, AWeaponBase*>& Pair : WeaponManager->GetWeapons())
+    {
+        AWeaponBase* Weapon = Pair.Value;
+        if (!Weapon) continue;
+
+        const FGameplayAttribute Attr = Weapon->GetAmmoAttribute();
+        if (!Attr.IsValid()) continue;
+
+        AbilitySystemComponent->SetNumericAttributeBase(Attr, (float)Weapon->GetMaxAmmo());
+    }
+}
+
+void ACommonCharacter::HandleAmmoChanged(const FOnAttributeChangeData& Data)
+{
+    BroadcastAmmo();
+}
+
 void ACommonCharacter::BroadcastAmmo()
 {
     if (WeaponManager == nullptr)
@@ -278,7 +346,7 @@ void ACommonCharacter::BroadcastAmmo()
 
     if (AWeaponBase* CurrentWeapon = WeaponManager->GetCurrentWeapon())
     {
-        OnAmmoChanged.Broadcast(WeaponManager->GetCurrentWeapon()->GetCurrentAmmo(), CurrentWeapon->GetMaxAmmo());
+        OnAmmoChanged.Broadcast(GetCurrentWeaponAmmo(), CurrentWeapon->GetMaxAmmo());
     }
 }
 

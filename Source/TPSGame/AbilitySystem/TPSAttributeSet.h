@@ -53,12 +53,46 @@ public:
 	FGameplayAttributeData Damage;
 	ATTRIBUTE_ACCESSORS(UTPSAttributeSet, Damage)
 
+	/*
+		탄약 — 무기 종류별 독립
+
+		무기 액터의 int32에서 어트리뷰트로 옮긴 이유:
+		GAS의 Cost 파이프라인(CheckCost/ApplyCost)을 그대로 쓰기 위해서다.
+		그러면 CommitAbility() 한 줄이
+		  - 탄약 부족 시 어빌리티 활성화 차단
+		  - 예측 차감(클라 즉시 반영) 및 서버 거부 시 롤백
+		을 모두 처리한다. 무기 액터의 평범한 멤버로는 어느 쪽도 불가능하다.
+
+		MaxAmmo는 어트리뷰트로 만들지 않는다. 무기 BP CDO의 설정값이라
+		모든 머신이 이미 동일하게 알고 있어 복제할 이유가 없다.
+	*/
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_RifleAmmo, Category = "Ammo")
+	FGameplayAttributeData RifleAmmo;
+	ATTRIBUTE_ACCESSORS(UTPSAttributeSet, RifleAmmo)
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MachineGunAmmo, Category = "Ammo")
+	FGameplayAttributeData MachineGunAmmo;
+	ATTRIBUTE_ACCESSORS(UTPSAttributeSet, MachineGunAmmo)
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_RocketAmmo, Category = "Ammo")
+	FGameplayAttributeData RocketAmmo;
+	ATTRIBUTE_ACCESSORS(UTPSAttributeSet, RocketAmmo)
+
 protected:
 	UFUNCTION()
 	void OnRep_Health(const FGameplayAttributeData& OldHealth);
 
 	UFUNCTION()
 	void OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth);
+
+	UFUNCTION()
+	void OnRep_RifleAmmo(const FGameplayAttributeData& OldValue);
+
+	UFUNCTION()
+	void OnRep_MachineGunAmmo(const FGameplayAttributeData& OldValue);
+
+	UFUNCTION()
+	void OnRep_RocketAmmo(const FGameplayAttributeData& OldValue);
 
 private:
 	// 클램프 등 사전 처리

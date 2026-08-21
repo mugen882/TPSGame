@@ -21,6 +21,7 @@
 #include "Subsystem/DifficultySubsystem.h"
 #include "Components/WidgetComponent.h"
 #include "AbilitySystem/TPSAttributeSet.h"
+#include "Common/TPSLog.h"
 
 AEnemyCharacter::AEnemyCharacter()
 {
@@ -177,13 +178,6 @@ void AEnemyCharacter::OnFireNotify()
 
     if (IsReloading() == true)
     {
-        return;
-    }
-
-    // 탄약 없으면 발사 대신 리로드
-    if (GetCurrentWeapon() && !GetCurrentWeapon()->HasAmmo())
-    {
-        AbilitySystemComponent->TryActivateAbilitiesByTag(FGameplayTagContainer(TAG_Input_Reload));
         return;
     }
 

@@ -7,6 +7,7 @@
 #include "GameplayEffectTypes.h"
 #include "AbilitySystemComponent.h"
 #include "Character/PlayerCharacter.h"
+#include "AbilitySystem/TPSAttributeSet.h"
 
 AWeaponMachineGun::AWeaponMachineGun()
 {
@@ -95,4 +96,10 @@ void AWeaponMachineGun::AmmoReload()
 {
 	TimeSinceLastShot = 0.f;
 	CurrentSpread = 0.f;
+}
+
+
+FGameplayAttribute AWeaponMachineGun::GetAmmoAttribute() const
+{
+	return UTPSAttributeSet::GetMachineGunAmmoAttribute();
 }

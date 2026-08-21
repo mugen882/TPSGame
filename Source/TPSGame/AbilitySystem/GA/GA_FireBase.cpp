@@ -140,19 +140,57 @@ void UGA_FireBase::FireOnce(const FGameplayAbilityActorInfo* ActorInfo) const
     if (!Weapon) return;
 
     const FVector AimPoint = Char->GetAimPoint();   // 카메라 기준 크로스헤어
-    if (Weapon->Fire(AimPoint, Char->GetController()))
-    {
-        if (APlayerCharacter * Player = Cast<APlayerCharacter>(Char))
-        {
-            Player->BroadcastAmmo();    // 탄약 UI 갱신
-		}
-    }
+
+    Weapon->Fire(AimPoint, Char->GetController());
 }
 
 ACommonCharacter* UGA_FireBase::GetOwningCharacter(const FGameplayAbilityActorInfo* ActorInfo) const
 {
     if (!ActorInfo) return nullptr;
     return Cast<ACommonCharacter>(ActorInfo->AvatarActor.Get());
+}
+
+/*
+    무한 탄약 무기 예외 처리
+
+    CostGameplayEffectClass는 어빌리티 클래스에 고정되지만, bInfiniteAmmo는
+    무기 BP 설정이다. 두 경로를 잇기 위해 Cost 검사/적용을 무기 설정으로 게이트한다.
+    (적도 탄약을 쓰고 재장전하므로 캐릭터 종류로는 분기하지 않는다)
+*/
+bool UGA_FireBase::CheckCost(
+    const FGameplayAbilitySpecHandle Handle,
+    const FGameplayAbilityActorInfo* ActorInfo,
+    OUT FGameplayTagContainer* OptionalRelevantTags) const
+{
+    if (ACommonCharacter* Char = GetOwningCharacter(ActorInfo))
+    {
+        if (AWeaponBase* Weapon = Char->GetCurrentWeapon())
+        {
+            if (Weapon->IsInfiniteAmmo())
+            {
+                return true;
+            }
+        }
+    }
+    return Super::CheckCost(Handle, ActorInfo, OptionalRelevantTags);
+}
+
+void UGA_FireBase::ApplyCost(
+    const FGameplayAbilitySpecHandle Handle,
+    const FGameplayAbilityActorInfo* ActorInfo,
+    const FGameplayAbilityActivationInfo ActivationInfo) const
+{
+    if (ACommonCharacter* Char = GetOwningCharacter(ActorInfo))
+    {
+        if (AWeaponBase* Weapon = Char->GetCurrentWeapon())
+        {
+            if (Weapon->IsInfiniteAmmo())
+            {
+                return;
+            }
+        }
+    }
+    Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
 }
 
 void UGA_FireBase::ApplyCooldown(

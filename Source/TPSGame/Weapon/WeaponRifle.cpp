@@ -7,6 +7,7 @@
 #include "Common/TPSGameDefine.h"
 #include "GameplayEffectTypes.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/TPSAttributeSet.h"
 
 AWeaponRifle::AWeaponRifle()
 {
@@ -44,4 +45,9 @@ bool AWeaponRifle::FireInternal(const FVector& AimPoint, AController* Instigator
 	}
 
 	return true;
+}
+
+FGameplayAttribute AWeaponRifle::GetAmmoAttribute() const
+{
+	return UTPSAttributeSet::GetRifleAmmoAttribute();
 }
