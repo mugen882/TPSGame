@@ -22,6 +22,9 @@ protected:
         const FGameplayAbilityActivationInfo ActivationInfo,
         const FGameplayEventData* TriggerEventData) override;
 
+    // 연사 중에는 조준점 1회 수신으로 어빌리티를 끝내지 않는다
+    virtual bool ShouldEndAfterAuthoritativeShot() const override;
+
     virtual void InputReleased(
         const FGameplayAbilitySpecHandle Handle,
         const FGameplayAbilityActorInfo* ActorInfo,

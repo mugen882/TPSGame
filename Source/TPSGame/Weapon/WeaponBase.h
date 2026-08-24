@@ -25,9 +25,17 @@ class TPSGAME_API AWeaponBase : public AActor
 public:
 	AWeaponBase();
 
-	// 발사 시도. 실제 발사가 이뤄졌으면 true.
-	// 탄약 검사/차감은 더 이상 여기서 하지 않는다 (GAS Cost GE가 처리).
-	bool Fire(const FVector& AimPoint, AController* InstigatorController);
+	/*
+		발사가 권위 경로와 연출 경로로 나뉘었다.
+
+		FireAuthoritative : 서버 전용. 트레이스 / 투사체 스폰 / 데미지 적용.
+		PlayFireCosmetic  : 실행되는 모든 머신. 머즐 플래시 / 발사음 / 임팩트 연출.
+
+		이전에는 Fire() 하나가 둘 다 했기 때문에, 클라이언트가 발사할 때
+		클라이언트에서 트레이스하고 데미지까지 적용하는 클라 권위 구조였다.
+	*/
+	bool FireAuthoritative(const FVector& AimPoint, AController* InstigatorController);
+	void PlayFireCosmetic(const FVector& AimPoint);
 
 	/*
 		이 무기가 소비하는 탄약 어트리뷰트.
@@ -65,9 +73,21 @@ protected:
 	virtual void BeginPlay() override;
 
 	// 파생 클래스가 실제 발사 메커니즘 구현 (히트스캔/투사체 등).
-	// 실제로 발사가 이뤄졌으면 true. false면 탄약을 소모하지 않는다
+	// 서버에서만 호출된다. 데미지 적용은 여기서만 일어난다.
 	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController)
 		PURE_VIRTUAL(AWeaponBase::FireInternal, return false;);
+
+	/*
+		판정 없는 연출 전용 트레이스. 데미지를 적용하지 않는다.
+
+		호출된 머신에서만 실행된다. 클라이언트는 서버 왕복을 기다리지 않고
+		즉시 탄착 피드백을 받고, 서버는 자기 권위 트레이스를 따로 돌린다.
+
+		TODO(M2b-2): 적 발사는 서버에서만 호출되므로 데디케이티드 서버에서는
+					 아무에게도 보이지 않는다. 또 플레이어 발사 연출도 남의
+					 화면에는 전달되지 않는다. GameplayCue로 이관해야 한다.
+	*/
+	virtual void FireCosmeticInternal(const FVector& /*AimPoint*/) {}
 
 	void ShowMuzzleFlash();
 

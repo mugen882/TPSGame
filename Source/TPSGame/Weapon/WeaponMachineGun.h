@@ -29,6 +29,9 @@ protected:
 	virtual void Tick(float DeltaTime) override;
 	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController) override;
 
+	// 판정 없는 탄착 연출 (로컬 예측)
+	virtual void FireCosmeticInternal(const FVector& AimPoint) override;
+
 	UFUNCTION()
 	void AmmoReload();
 

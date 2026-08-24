@@ -181,29 +181,36 @@ void ACommonCharacter::ApplyDamageEffect(
     float Damage,
     AActor* SourceActor)
 {
-    /*
-        TODO(M2): 현재는 "피해자 ASC로 스펙을 만들어 자기 자신에게 적용"하는 구조다.
-                  코옵에서는 킬 어트리뷰션과 소스 기반 계수가 전부 피해자 기준이 되어버린다.
-                  SourceASC->MakeOutgoingSpec() -> ApplyGameplayEffectSpecToTarget(TargetASC)로 바꾸고
-                  서버 전용으로 게이트할 것. (히트스캔 서버 권위화와 같은 작업 단위)
-    */
-    if (!Target || !DamageEffectClass) return;
+    if (!Target || !DamageEffectClass || !SourceActor) return;
 
     ACommonCharacter* HitChar = Cast<ACommonCharacter>(Target);
     if (!HitChar) return;
 
+    /*
+        데미지 적용은 서버 전용이다.
+        트레이스와 데미지는 서버에서만 일어난다.
+    */
+    if (!HitChar->HasAuthority()) return;
+
     UAbilitySystemComponent* TargetASC = HitChar->GetAbilitySystemComponent();
     if (!TargetASC) return;
 
-    FGameplayEffectContextHandle Context = TargetASC->MakeEffectContext();
+    ACommonCharacter* SourceChar = Cast<ACommonCharacter>(SourceActor);
+    UAbilitySystemComponent* SourceASC = SourceChar ? SourceChar->GetAbilitySystemComponent() : nullptr;
+    if (!SourceASC)
+    {
+        return;
+    }
+
+    FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
     Context.AddSourceObject(SourceActor);
     Context.AddInstigator(SourceActor, SourceActor);   // 가해자 등록 (방향성 비네트용)
 
-    FGameplayEffectSpecHandle Spec = TargetASC->MakeOutgoingSpec(DamageEffectClass, 1.0f, Context);
+    FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(DamageEffectClass, 1.0f, Context);
     if (Spec.IsValid())
     {
         Spec.Data->SetSetByCallerMagnitude(TAG_Data_Damage, Damage);
-        TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
+        SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data, TargetASC);
     }
 }
 

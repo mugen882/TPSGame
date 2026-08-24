@@ -37,18 +37,17 @@ FGameplayAttribute AWeaponBase::GetAmmoAttribute() const
 	return FGameplayAttribute();
 }
 
-bool AWeaponBase::Fire(const FVector& AimPoint, AController* InstigatorController)
+bool AWeaponBase::FireAuthoritative(const FVector& AimPoint, AController* InstigatorController)
 {
-	if (!FireInternal(AimPoint, InstigatorController))
-	{
-		// 실제 발사가 이뤄지지 않았으면 탄약/연출을 소모하지 않는다.
-		return false;
-	}
+	// 서버 권위 판정. 연출은 PlayFireCosmetic이 따로 담당한다.
+	return FireInternal(AimPoint, InstigatorController);
+}
 
+void AWeaponBase::PlayFireCosmetic(const FVector& AimPoint)
+{
 	ShowMuzzleFlash();
 	PlayFireSound();
-
-	return true;
+	FireCosmeticInternal(AimPoint);
 }
 
 FVector AWeaponBase::GetMuzzleLocation() const

@@ -1,9 +1,12 @@
 ﻿#include "AbilitySystem/GA/GA_FireBase.h"
+#include "AbilitySystem/TPSAbilityTargetData.h"
 #include "Common/TPSGameplayTags.h"
+#include "Common/TPSLog.h"
 #include "Weapon/WeaponBase.h"
 #include "Character/PlayerCharacter.h"
 #include "Character/CommonCharacter.h"
 #include "GameplayEffect.h"
+#include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Animation/AnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -15,6 +18,15 @@
 UGA_FireBase::UGA_FireBase()
 {
     InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+
+    /*
+        기본값 LocalOnly에서는 소유 클라이언트에서만 실행됨
+
+        LocalPredicted로 올리면 클라이언트가 즉시 반응하면서도
+        서버가 같은 스펙을 이어받아 CanActivateAbility / CheckCost를
+        독립적으로 재검증한다.
+    */
+    NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
     FGameplayTagContainer AssetTags;
     AssetTags.AddTag(TAG_Ability_Fire);
@@ -83,6 +95,8 @@ bool UGA_FireBase::PlayFireMontage(const FGameplayAbilityActorInfo* ActorInfo, b
     {
         // 플레이어: 어빌리티가 곧바로 끝나므로 몽타주는 연출용으로 재생한다.
         // (PlayMontageAndWait를 쓰면 EndAbility가 몽타주를 즉시 취소해버린다)
+        // TODO(M2b-2): 이 재생은 로컬 전용이라 다른 플레이어에게 보이지 않는다.
+        //              GameplayCue로 이관할 것.
         if (USkeletalMeshComponent* Mesh = Character->GetMesh())
         {
             if (UAnimInstance* Anim = Mesh->GetAnimInstance())
@@ -119,7 +133,15 @@ void UGA_FireBase::ActivateAbility(
         PlayFireMontage(ActorInfo, /*bEndAbilityOnMontageEnd=*/false);
         FireOnce(ActorInfo);
 
-        EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+        /*
+            서버가 원격 클라의 조준점을 기다리는 중이면 어빌리티를 끝내지 않는다.
+            여기서 EndAbility를 부르면 대기 델리게이트가 해제되어
+            조준점이 도착해도 발사가 이뤄지지 않는다.
+        */
+        if (!IsWaitingForClientAim())
+        {
+            EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+        }
     }
     else
     {
@@ -131,7 +153,23 @@ void UGA_FireBase::ActivateAbility(
     }
 }
 
-void UGA_FireBase::FireOnce(const FGameplayAbilityActorInfo* ActorInfo) const
+void UGA_FireBase::EndAbility(
+    const FGameplayAbilitySpecHandle Handle,
+    const FGameplayAbilityActorInfo* ActorInfo,
+    const FGameplayAbilityActivationInfo ActivationInfo,
+    bool bReplicateEndAbility, bool bWasCancelled)
+{
+    StopWaitForClientAim();
+    Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+FVector UGA_FireBase::ComputeLocalAimPoint(const FGameplayAbilityActorInfo* ActorInfo) const
+{
+    ACommonCharacter* Char = GetOwningCharacter(ActorInfo);
+    return Char ? Char->GetAimPoint() : FVector::ZeroVector;
+}
+
+void UGA_FireBase::FireOnce(const FGameplayAbilityActorInfo* ActorInfo)
 {
     ACommonCharacter* Char = GetOwningCharacter(ActorInfo);
     if (!Char) return;
@@ -139,9 +177,194 @@ void UGA_FireBase::FireOnce(const FGameplayAbilityActorInfo* ActorInfo) const
     AWeaponBase* Weapon = Char->GetCurrentWeapon();
     if (!Weapon) return;
 
-    const FVector AimPoint = Char->GetAimPoint();   // 카메라 기준 크로스헤어
+    const bool bLocal     = ActorInfo->IsLocallyControlled();
+    const bool bAuthority = ActorInfo->IsNetAuthority();
 
-    Weapon->Fire(AimPoint, Char->GetController());
+    if (bLocal)
+    {
+        // 카메라를 가진 머신에서만 조준점을 계산할 수 있다.
+        const FVector AimPoint = ComputeLocalAimPoint(ActorInfo);
+
+        // 연출은 항상 로컬에서 즉시 재생한다 (예측).
+        Weapon->PlayFireCosmetic(AimPoint);
+
+        if (bAuthority)
+        {
+            // AI(서버에서 AIController가 조종) — 조준점을 스스로 알므로 왕복 없이 권위 발사
+            FireAuthoritative(ActorInfo, AimPoint);
+        }
+        else
+        {
+            // 원격 클라 — 판정은 서버에 맡긴다
+            SendAimPointToServer(ActorInfo, AimPoint);
+        }
+    }
+    else if (bAuthority)
+    {
+        // 서버에서 원격 폰의 어빌리티가 실행된 경우. 조준점을 알 수 없으므로 기다린다.
+        BeginWaitForClientAim(ActorInfo);
+    }
+}
+
+void UGA_FireBase::SendAimPointToServer(const FGameplayAbilityActorInfo* ActorInfo, const FVector& AimPoint)
+{
+    UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+    if (!ASC) return;
+
+    /*
+        FScopedPredictionWindow
+
+        이 블록 안에서 만든 예측 키를 서버가 받아, 클라이언트가 예측 실행한
+        어빌리티 인스턴스와 이 조준점을 짝지을 수 있게 한다.
+        키가 없으면 서버는 "어느 발사에 대한 조준점인지" 알 수 없다.
+    */
+    FScopedPredictionWindow ScopedPrediction(ASC, GetCurrentActivationInfo().GetActivationPredictionKey());
+
+    FGameplayAbilityTargetDataHandle DataHandle;
+    DataHandle.Add(new FTPSTargetData_AimPoint(AimPoint));
+
+    ASC->ServerSetReplicatedTargetData(
+        GetCurrentAbilitySpecHandle(),
+        GetCurrentActivationInfo().GetActivationPredictionKey(),
+        DataHandle,
+        FGameplayTag(),
+        ASC->ScopedPredictionKey);
+
+    UE_LOG(TPSLog, Verbose, TEXT("%s 조준점 전송 %s"),
+        *TPSNetDebug::TPSNetPrefix(ActorInfo->AvatarActor.Get()), *AimPoint.ToCompactString());
+}
+
+void UGA_FireBase::BeginWaitForClientAim(const FGameplayAbilityActorInfo* ActorInfo)
+{
+    UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+    if (!ASC || TargetDataDelegateHandle.IsValid()) return;
+
+    const FGameplayAbilitySpecHandle SpecHandle = GetCurrentAbilitySpecHandle();
+    const FPredictionKey PredKey = GetCurrentActivationInfo().GetActivationPredictionKey();
+
+    TargetDataDelegateHandle =
+        ASC->AbilityTargetDataSetDelegate(SpecHandle, PredKey)
+           .AddUObject(this, &UGA_FireBase::OnClientAimPointReceived);
+
+    // 조준점이 도착하지 않으면 어빌리티가 영구히 매달린다.
+    // InstancedPerActor라 그 상태에서는 다시 발사할 수도 없다.
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().SetTimer(
+            ClientAimTimeoutTimer, this, &UGA_FireBase::OnClientAimTimeout, ClientAimTimeout, false);
+    }
+
+    /*
+        조준점이 어빌리티 활성화보다 먼저 도착했을 수 있다.
+        (ServerSetReplicatedTargetData가 ServerTryActivateAbility보다 먼저 처리되는 경우)
+        그 경우 GAS가 값을 보관해두므로 여기서 한 번 꺼내본다.
+    */
+    ASC->CallReplicatedTargetDataDelegatesIfSet(SpecHandle, PredKey);
+}
+
+void UGA_FireBase::StopWaitForClientAim()
+{
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(ClientAimTimeoutTimer);
+    }
+
+    if (!TargetDataDelegateHandle.IsValid()) return;
+
+    if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+    {
+        ASC->AbilityTargetDataSetDelegate(
+                GetCurrentAbilitySpecHandle(),
+                GetCurrentActivationInfo().GetActivationPredictionKey())
+            .Remove(TargetDataDelegateHandle);
+    }
+    TargetDataDelegateHandle.Reset();
+}
+
+void UGA_FireBase::OnClientAimPointReceived(const FGameplayAbilityTargetDataHandle& Data, FGameplayTag /*ActivationTag*/)
+{
+    const FGameplayAbilitySpecHandle SpecHandle = GetCurrentAbilitySpecHandle();
+    const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+    const FGameplayAbilityActivationInfo ActivationInfo = GetCurrentActivationInfo();
+
+    if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+    {
+        // 소비하지 않으면 다음 발사에서 옛 조준점이 다시 잡힌다.
+        ASC->ConsumeClientReplicatedTargetData(SpecHandle, ActivationInfo.GetActivationPredictionKey());
+    }
+
+    StopWaitForClientAim();
+
+    const FTPSTargetData_AimPoint* AimData =
+        static_cast<const FTPSTargetData_AimPoint*>(Data.Get(0));
+
+    if (AimData && AimData->GetScriptStruct() == FTPSTargetData_AimPoint::StaticStruct())
+    {
+        FireAuthoritative(ActorInfo, AimData->AimPoint);
+    }
+
+    if (ShouldFireImmediately(ActorInfo) && ShouldEndAfterAuthoritativeShot())
+    {
+        EndAbility(SpecHandle, ActorInfo, ActivationInfo, true, false);
+    }
+}
+
+void UGA_FireBase::OnClientAimTimeout()
+{
+    UE_LOG(TPSLog, Warning, TEXT("%s 클라 조준점 미도착 — 발사 취소"),
+        *TPSNetDebug::TPSNetPrefix(GetCurrentActorInfo() ? GetCurrentActorInfo()->AvatarActor.Get() : nullptr));
+
+    StopWaitForClientAim();
+    EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, true);
+}
+
+bool UGA_FireBase::ValidateAimPoint(ACommonCharacter* Char, AWeaponBase* Weapon, FVector& InOutAimPoint) const
+{
+    if (!Char || !Weapon) return false;
+
+    const FVector Muzzle = Weapon->GetMuzzleLocation();
+    FVector Delta = InOutAimPoint - Muzzle;
+    const float Dist = Delta.Size();
+    if (Dist <= KINDA_SMALL_NUMBER) return false;
+
+    const FVector Dir = Delta / Dist;
+
+    // 사거리 초과 → 클램프
+    const float MaxDist = Weapon->GetFireRange() * AimRangeTolerance;
+    if (Dist > MaxDist)
+    {
+        InOutAimPoint = Muzzle + Dir * MaxDist;
+    }
+
+    // 등 뒤 조준 거부
+    if (AimMinForwardDot > -1.0f)
+    {
+        if (FVector::DotProduct(Char->GetActorForwardVector(), Dir) < AimMinForwardDot)
+        {
+            UE_LOG(TPSLog, Warning, TEXT("%s 조준점 검증 실패 (후방)"),
+                *TPSNetDebug::TPSNetPrefix(Char));
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void UGA_FireBase::FireAuthoritative(const FGameplayAbilityActorInfo* ActorInfo, const FVector& AimPoint)
+{
+    ACommonCharacter* Char = GetOwningCharacter(ActorInfo);
+    if (!Char) return;
+
+    AWeaponBase* Weapon = Char->GetCurrentWeapon();
+    if (!Weapon) return;
+
+    FVector ValidatedAim = AimPoint;
+    if (!ValidateAimPoint(Char, Weapon, ValidatedAim))
+    {
+        return;   // 탄약과 쿨다운은 이미 소모됐다. 명중만 무효.
+    }
+
+    Weapon->FireAuthoritative(ValidatedAim, Char->GetController());
 }
 
 ACommonCharacter* UGA_FireBase::GetOwningCharacter(const FGameplayAbilityActorInfo* ActorInfo) const

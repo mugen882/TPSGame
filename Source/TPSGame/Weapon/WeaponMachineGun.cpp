@@ -75,12 +75,6 @@ bool AWeaponMachineGun::FireInternal(const FVector& AimPoint, AController* Insti
 		return true;   // 빗나가도 발사는 이뤄짐 → 탄약 소모
 	}
 
-	if (ImpactEffect)
-	{
-		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-			GetWorld(), ImpactEffect, Hit.ImpactPoint, Hit.ImpactNormal.Rotation());
-	}
-
 	AActor* HitActor = Hit.GetActor();
 	if (!HitActor) return true;
 	if (Cast<ACommonCharacter>(HitActor))
@@ -102,4 +96,27 @@ void AWeaponMachineGun::AmmoReload()
 FGameplayAttribute AWeaponMachineGun::GetAmmoAttribute() const
 {
 	return UTPSAttributeSet::GetMachineGunAmmoAttribute();
+}
+
+void AWeaponMachineGun::FireCosmeticInternal(const FVector& AimPoint)
+{
+	/*
+		연출 전용 트레이스. 데미지를 적용하지 않는다.
+
+		서버의 권위 트레이스와 별개로 각 머신이 자기 화면의 탄착 이펙트를 만든다.
+		클라이언트가 서버 왕복을 기다리지 않고 즉시 피드백을 받게 하기 위함이다.
+	*/
+	const FVector Start = GetMuzzleLocation();
+	const FVector Dir = (AimPoint - Start).GetSafeNormal();
+	const FVector End = Start + Dir * FireRange;
+
+	FHitResult Hit;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+	Params.AddIgnoredActor(GetOwner());
+
+	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Weapon, Params))
+	{
+		PlayImpactEffect(Hit);
+	}
 }

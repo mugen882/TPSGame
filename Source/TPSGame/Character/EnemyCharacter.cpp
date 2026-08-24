@@ -182,7 +182,17 @@ void AEnemyCharacter::OnFireNotify()
     }
 
     const FVector AimPoint = PendingTarget->GetActorLocation() + FVector(0, 0, 50);
-    GetCurrentWeapon()->Fire(AimPoint, GetController());
+
+    /*
+        적은 서버에서만 실행되므로 조준점 왕복이 필요 없다.
+        연출과 권위 판정을 모두 여기서 수행한다.
+
+        TODO(M2b-2): PlayFireCosmetic은 호출된 머신에서만 보인다.
+                     데디케이티드 서버에서는 적의 발사 연출이 아무에게도 보이지 않으므로
+                     GameplayCue로 이관해야 한다.
+    */
+    GetCurrentWeapon()->PlayFireCosmetic(AimPoint);
+    GetCurrentWeapon()->FireAuthoritative(AimPoint, GetController());
 
     PendingTarget = nullptr;
 }

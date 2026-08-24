@@ -21,6 +21,7 @@ public class TPSGame : ModuleRules
 			"GameplayAbilities",
 			"GameplayTags",
 			"GameplayTasks",
+            "NetCore",
         });
 
         PublicIncludePaths.Add(ModuleDirectory);

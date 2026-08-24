@@ -44,6 +44,19 @@ void UGA_FireMachineGun::ActivateAbility(
     }
 }
 
+/*
+    연사는 조준점 1회 수신으로 끝나지 않는다.
+
+    TODO(M2b-3): 현재 연사 루프는 어빌리티 활성화 1회에 대해 타이머로 돌기 때문에
+                 모든 발사가 같은 예측 키를 공유한다. 그래서 발당 Cost가 적용되지 않고
+                 조준점도 발당으로 정확히 짝지어지지 않는다.
+                 발마다 어빌리티를 재활성화하는 구조로 재설계해야 한다.
+*/
+bool UGA_FireMachineGun::ShouldEndAfterAuthoritativeShot() const
+{
+    return false;
+}
+
 void UGA_FireMachineGun::FireLoop()
 {
     UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
