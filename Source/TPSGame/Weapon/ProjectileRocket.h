@@ -17,6 +17,16 @@ protected:
 
     void Explode(const FVector& Center);
 
+    virtual UNiagaraSystem* GetImpactVFX() const override
+    {
+        return ExplosionVFX ? ExplosionVFX : ImpactVFX;
+    }
+
+    virtual USoundBase* GetImpactSound() const override
+    {
+        return ExplosionSound ? ExplosionSound : ImpactSound;
+    }
+
 protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rocket|Explosion")
     float ExplosionRadius = 300.f;

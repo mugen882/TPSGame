@@ -40,6 +40,7 @@ EBTNodeResult::Type UBTTask_FireWeapon::ExecuteTask(UBehaviorTreeComponent& Owne
     AActor* Target = BB ? Cast<AActor>(BB->GetValueAsObject(TargetActorKey)) : nullptr;
     if (!Target)
     {
+        UE_LOG(TPSLog, Warning, TEXT("%s BTTask_FireWeapon: Target 없음"), *TPSNetDebug::TPSNetPrefix(Enemy));
         // 타겟 없으면 발사 안 함, 시퀀스는 살림
         return EBTNodeResult::Succeeded;
     }
@@ -47,7 +48,7 @@ EBTNodeResult::Type UBTTask_FireWeapon::ExecuteTask(UBehaviorTreeComponent& Owne
     const float Dist = FVector::Dist(Enemy->GetActorLocation(), Target->GetActorLocation());
     if (Dist > Enemy->GetAttackRange())
     {
-		//UE_LOG(TPSLog, Warning, TEXT("BTTask_FireWeapon: Target out of range (%.1f > %.1f)"), Dist, Enemy->GetAttackRange());
+        UE_LOG(TPSLog, Warning, TEXT("%s BTTask_FireWeapon: 사거리 밖 %.0f > %.0f"), *TPSNetDebug::TPSNetPrefix(Enemy), Dist, Enemy->GetAttackRange());
         // 사거리 밖 → 발사 안 함
         return EBTNodeResult::Succeeded;
     }
@@ -63,7 +64,11 @@ EBTNodeResult::Type UBTTask_FireWeapon::ExecuteTask(UBehaviorTreeComponent& Owne
     }
 
     const FGameplayAbilitySpecHandle Handle = Enemy->GetFireAbilitySpecHandle();
-    if (!Handle.IsValid()) return EBTNodeResult::Succeeded;
+    if (!Handle.IsValid())
+    {
+        UE_LOG(TPSLog, Warning, TEXT("%s BTTask_FireWeapon: SpecHandle 무효"), *TPSNetDebug::TPSNetPrefix(Enemy));
+        return EBTNodeResult::Succeeded;
+    }
 
     // 발사 시도. active/쿨다운이면 이번엔 패스
     if (!ASC->TryActivateAbility(Handle))
@@ -150,13 +155,15 @@ void UBTTask_FireWeapon::TickTask(UBehaviorTreeComponent& OwnerComp, uint8* Node
 
 EBTNodeResult::Type UBTTask_FireWeapon::AbortTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
+	UE_LOG(TPSLog, Warning, TEXT("BTTask_FireWeapon::AbortTask"));
     FBTFireWeaponMemory* Mem = reinterpret_cast<FBTFireWeaponMemory*>(NodeMemory);
     if (AAIController* AICon = OwnerComp.GetAIOwner())
     {
         if (AEnemyCharacter* Enemy = Cast<AEnemyCharacter>(AICon->GetPawn()))
-        {
+        {   
             if (UAbilitySystemComponent* ASC = Enemy->GetAbilitySystemComponent())
             {
+                UE_LOG(TPSLog, Warning, TEXT("%s BTTask_FireWeapon: AbortTask — 발사 취소"), *TPSNetDebug::TPSNetPrefix(Enemy));
                 // 버스트든 단발이든 진행 중이면 취소
                 ASC->CancelAbilityHandle(Enemy->GetFireAbilitySpecHandle());
             }

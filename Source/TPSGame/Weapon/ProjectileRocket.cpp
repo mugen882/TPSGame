@@ -13,6 +13,12 @@ void AProjectileRocket::HandleImpact(AActor* HitActor, const FHitResult& Hit)
 
 void AProjectileRocket::Explode(const FVector& Center)
 {
+    /*
+        판정(반경 데미지)은 서버에서만, 연출은 멀티캐스트로 전원에게.
+
+        기존에는 이 함수가 둘 다 로컬로 처리했다. 로켓 발사는 서버에서만
+        실행되므로 데디케이티드 서버에서는 폭발 연출이 아무에게도 보이지 않았다.
+    */
     TArray<FOverlapResult> Overlaps;
     FCollisionQueryParams Params;
     Params.AddIgnoredActor(this);
@@ -41,13 +47,8 @@ void AProjectileRocket::Explode(const FVector& Center)
         ACommonCharacter::ApplyDamageEffect(Char, DamageEffectClass, Damage * Falloff, GetInstigator());
     }
 
-    UNiagaraSystem* VFX = ExplosionVFX ? ExplosionVFX : ImpactVFX;
-    if (VFX)
-        UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), VFX, Center, FRotator::ZeroRotator, FVector(3.f), true, true);
-
-    USoundBase* SFX = ExplosionSound ? ExplosionSound : ImpactSound;
-    if (SFX)
-        UGameplayStatics::PlaySoundAtLocation(this, SFX, Center);
+    // 연출은 베이스의 멀티캐스트를 재사용한다.
+    Multicast_PlayImpactFX(Center, FVector::UpVector);
 
     if (bDrawDebugExplosion)
         DrawDebugSphere(GetWorld(), Center, ExplosionRadius, 16, FColor::Orange, false, 1.5f);

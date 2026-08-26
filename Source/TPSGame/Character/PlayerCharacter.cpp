@@ -52,10 +52,6 @@ APlayerCharacter::APlayerCharacter()
         Mixed: 소유 클라이언트에게는 GameplayEffect를 온전히 복제하고,
                나머지 클라에게는 GameplayTag와 GameplayCue만 복제한다.
 
-        플레이어는 자기 버프/디버프의 남은 시간, 스택 수 등을 UI로 봐야 하므로
-        Mixed가 필요하다. 반대로 남의 캐릭터에 걸린 GE 세부 정보는 알 필요가 없어
-        대역폭을 아낀다.
-
         주의: Mixed는 ASC의 OwnerActor가 유효한 커넥션에 소유되어 있어야 한다.
               여기서는 PlayerController가 캐릭터를 소유하므로 조건을 만족한다.
     */

@@ -14,8 +14,9 @@ void AWeaponRocketLauncher::BeginPlay()
 	
 }
 
-bool AWeaponRocketLauncher::FireInternal(const FVector& AimPoint, AController* InstigatorController)
+bool AWeaponRocketLauncher::FireInternal(const FVector& AimPoint, AController* InstigatorController, FHitResult& OutHit)
 {
+	// 투사체 무기는 즉시 명중 지점이 없다. OutHit을 채우지 않는다.
 	if (!ProjectileClass)
 	{
 		return false;   // 투사체 클래스 미설정 → 발사 실패(탄약 소모 없음)

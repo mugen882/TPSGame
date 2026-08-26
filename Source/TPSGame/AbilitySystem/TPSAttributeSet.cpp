@@ -35,9 +35,7 @@ void UTPSAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	/*
 		탄약은 COND_OwnerOnly.
 
-		Health와 달리 남의 탄약은 누구도 볼 필요가 없다. 적 캐릭터는 소유 커넥션이
-		아예 없으므로 탄약이 네트워크로 나가지 않는다.
-		4인 코옵이면 이 조건 하나로 탄약 트래픽이 1/4로 줄어든다.
+		Health와 달리 남의 탄약은 누구도 볼 필요가 없다.
 	*/
 	DOREPLIFETIME_CONDITION_NOTIFY(UTPSAttributeSet, RifleAmmo, COND_OwnerOnly, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UTPSAttributeSet, MachineGunAmmo, COND_OwnerOnly, REPNOTIFY_Always);
@@ -58,8 +56,10 @@ void UTPSAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealt
 
 void UTPSAttributeSet::OnRep_RifleAmmo(const FGameplayAttributeData& OldValue)
 {
-	UE_LOG(TPSLog, Warning, TEXT("OnRep_RifleAmmo %.0f -> %.0f"),
-		OldValue.GetCurrentValue(), GetRifleAmmo());
+	UE_LOG(TPSLog, Warning, TEXT("OnRep_RifleAmmo Old(B=%.0f C=%.0f) -> New(B=%.0f C=%.0f)"),
+		OldValue.GetBaseValue(), OldValue.GetCurrentValue(),
+		RifleAmmo.GetBaseValue(), RifleAmmo.GetCurrentValue());
+
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UTPSAttributeSet, RifleAmmo, OldValue);
 }
 

@@ -3,6 +3,8 @@
 #include "Components/CapsuleComponent.h"
 #include "Blueprint/UserWidget.h"
 #include "AbilitySystemComponent.h"
+#include "Net/UnrealNetwork.h"
+#include "GameplayEffectTypes.h"
 #include "AbilitySystem/TPSAttributeSet.h"
 #include "Common/TPSGameplayTags.h"
 #include "GameplayEffect.h"
@@ -210,8 +212,16 @@ void ACommonCharacter::ApplyDamageEffect(
     if (Spec.IsValid())
     {
         Spec.Data->SetSetByCallerMagnitude(TAG_Data_Damage, Damage);
-        SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data, TargetASC);
+		SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data, TargetASC); // PostGameplayEffectExecute에서 Health가 차감된다.
     }
+}
+
+void ACommonCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+    // 가해자는 피격자 본인만 알면 된다.
+    DOREPLIFETIME_CONDITION(ACommonCharacter, LastDamageInstigator, COND_OwnerOnly);
 }
 
 void ACommonCharacter::NotifyDamageFrom(AActor* DamageInstigator)
@@ -241,6 +251,23 @@ void ACommonCharacter::SpawnWeapons()
 void ACommonCharacter::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+
+    // 임시 진단용
+    if (!HasAuthority() && GetLocalRole() == ROLE_SimulatedProxy)
+    {
+        if (UAnimInstance* Anim = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+        {
+            if (Anim->Montage_IsPlaying(FireMontage))
+            {
+                UE_LOG(TPSLog, Warning, TEXT("%s 위치 %.3f / %.3f, 슬롯가중치 %.2f"),
+                    *TPSNetDebug::TPSNetPrefix(this),
+                    Anim->Montage_GetPosition(FireMontage),
+                    FireMontage->GetPlayLength(),
+                    Anim->GetSlotMontageLocalWeight(TEXT("UpperBody")));   // 실제 슬롯 이름으로
+            }
+            bWasPlayingLastFrame = Anim->Montage_IsPlaying(FireMontage);
+        }
+    }
 }
 
 void ACommonCharacter::GrantDefaultAbilities()
@@ -286,6 +313,18 @@ void ACommonCharacter::HandleHealthChanged(const FOnAttributeChangeData& Data)
 }
 
 void ACommonCharacter::HandleWeaponHitConfirmed()
+{
+    // 서버가 원격 폰의 명중을 판정한 경우, 사격자 클라에게 전달한다.
+    if (HasAuthority() && !IsLocallyControlled())
+    {
+        Client_NotifyHitConfirmed();
+        return;
+    }
+
+    OnHitConfirmed.Broadcast();
+}
+
+void ACommonCharacter::Client_NotifyHitConfirmed_Implementation()
 {
     OnHitConfirmed.Broadcast();
 }
@@ -342,6 +381,53 @@ void ACommonCharacter::InitAmmoAttributes()
 void ACommonCharacter::HandleAmmoChanged(const FOnAttributeChangeData& Data)
 {
     BroadcastAmmo();
+}
+
+void ACommonCharacter::GameplayCue_Weapon_Fire(EGameplayCueEvent::Type EventType, const FGameplayCueParameters& Parameters)
+{
+    if (EventType != EGameplayCueEvent::Executed) return;
+
+    if (AWeaponBase* Weapon = GetCurrentWeapon())
+    {
+        Weapon->ShowMuzzleFlash();
+        Weapon->PlayFireSound();
+    }
+}
+
+void ACommonCharacter::GameplayCue_Weapon_Impact(EGameplayCueEvent::Type EventType, const FGameplayCueParameters& Parameters)
+{
+    if (EventType != EGameplayCueEvent::Executed) return;
+
+    if (AWeaponBase* Weapon = GetCurrentWeapon())
+    {
+        // 탄착 위치/노멀은 판정한 쪽(서버) 또는 예측한 쪽(클라)이 파라미터로 실어 보낸다.
+        Weapon->PlayImpactEffectAt(Parameters.Location, Parameters.Normal);
+    }
+}
+
+void ACommonCharacter::ExecuteFireCue()
+{
+    if (!AbilitySystemComponent) return;
+
+    FGameplayCueParameters Params;
+    Params.Instigator = this;
+    Params.SourceObject = GetCurrentWeapon();
+
+    AbilitySystemComponent->ExecuteGameplayCue(TAG_Cue_Weapon_Fire, Params);
+}
+
+void ACommonCharacter::ExecuteImpactCue(const FVector& Location, const FVector& Normal)
+{
+    if (!AbilitySystemComponent) return;
+
+    // 탄착 위치는 판정한 쪽(서버) 또는 예측한 쪽(클라)만 알기 때문에 파라미터로 전달한다.
+    FGameplayCueParameters Params;
+    Params.Instigator = this;
+    Params.SourceObject = GetCurrentWeapon();
+    Params.Location = Location;
+    Params.Normal = Normal;
+
+    AbilitySystemComponent->ExecuteGameplayCue(TAG_Cue_Weapon_Impact, Params);
 }
 
 void ACommonCharacter::BroadcastAmmo()

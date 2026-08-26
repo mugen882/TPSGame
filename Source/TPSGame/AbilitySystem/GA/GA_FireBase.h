@@ -113,8 +113,11 @@ private:
     */
     bool ValidateAimPoint(ACommonCharacter* Char, AWeaponBase* Weapon, FVector& InOutAimPoint) const;
 
-    // 서버 권위 발사 (트레이스 + 데미지)
+    // 서버 권위 발사 (트레이스 + 데미지 + 연출 Cue)
     void FireAuthoritative(const FGameplayAbilityActorInfo* ActorInfo, const FVector& AimPoint);
+
+    // 클라 예측 연출 (머즐/발사음 + 예측 탄착)
+    void ExecuteFireCues(const FGameplayAbilityActorInfo* ActorInfo, const FVector& AimPoint);
 
     // 발사 몽타주 재생.
     // bEndAbilityOnMontageEnd
@@ -125,6 +128,12 @@ private:
 
     UFUNCTION()
     void OnFireMontageEnded();
+
+    UFUNCTION()
+    void OnFireMontageCancelled();
+
+    // 클라 예측 연출 (머즐/발사음 + 예측 탄착)
+    void PredictFireCues(const FGameplayAbilityActorInfo* ActorInfo, const FVector& AimPoint);
 
 protected:
     // 사거리 클램프 여유. 1.0이면 정확히 FireRange까지만 허용.
@@ -145,4 +154,12 @@ private:
 
     FDelegateHandle TargetDataDelegateHandle;
     FTimerHandle    ClientAimTimeoutTimer;
+
+    // 연사용 최근 조준점 캐시. 서버 루프가 이 값으로 발사한다.
+    FVector CachedClientAim = FVector::ZeroVector;
+    bool    bHasCachedAim = false;
+
+    // GA_FireBase.h — private
+    // 진단용 — M2b-3 이후 제거
+    float MontageStartTime = 0.f;
 };

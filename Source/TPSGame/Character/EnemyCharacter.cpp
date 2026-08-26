@@ -22,6 +22,7 @@
 #include "Components/WidgetComponent.h"
 #include "AbilitySystem/TPSAttributeSet.h"
 #include "Common/TPSLog.h"
+#include "Net/UnrealNetwork.h"
 
 AEnemyCharacter::AEnemyCharacter()
 {
@@ -71,15 +72,6 @@ void AEnemyCharacter::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    // 죽으면 래그돌이 도는 중이므로 조준 회전을 멈춘다.
-    if (IsDead()) return;
-
-    if (PendingTarget == nullptr) return;
-
-    const FVector ToTarget = PendingTarget->GetActorLocation() - GetActorLocation();
-    const FRotator LookYaw(0.f, ToTarget.Rotation().Yaw, 0.f);  // yaw만
-    const FRotator NewRot = FMath::RInterpTo(GetActorRotation(), LookYaw, DeltaTime, 5.f);
-    SetActorRotation(NewRot);
 }
 
 void AEnemyCharacter::PossessedBy(AController* NewController)
@@ -95,6 +87,12 @@ void AEnemyCharacter::PossessedBy(AController* NewController)
     {
         AttrSet->InitializeAttributes(GetBaseHealth() * HealthMul);
     }
+}
+
+void AEnemyCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(AEnemyCharacter, bHoldingAim);
 }
 
 void AEnemyCharacter::SetFireTarget(AActor* Target)
@@ -185,14 +183,17 @@ void AEnemyCharacter::OnFireNotify()
 
     /*
         적은 서버에서만 실행되므로 조준점 왕복이 필요 없다.
-        연출과 권위 판정을 모두 여기서 수행한다.
-
-        TODO(M2b-2): PlayFireCosmetic은 호출된 머신에서만 보인다.
-                     데디케이티드 서버에서는 적의 발사 연출이 아무에게도 보이지 않으므로
-                     GameplayCue로 이관해야 한다.
+        연출은 GameplayCue로 실행해 모든 클라이언트에 전파한다.
+        (예측 키가 없으므로 사격자 예외 없이 전원이 재생한다)
     */
-    GetCurrentWeapon()->PlayFireCosmetic(AimPoint);
-    GetCurrentWeapon()->FireAuthoritative(AimPoint, GetController());
+    FHitResult Hit;
+    GetCurrentWeapon()->FireAuthoritative(AimPoint, GetController(), Hit);
+
+    ExecuteFireCue();
+    if (Hit.bBlockingHit)
+    {
+        ExecuteImpactCue(Hit.ImpactPoint, Hit.ImpactNormal);
+    }
 
     PendingTarget = nullptr;
 }

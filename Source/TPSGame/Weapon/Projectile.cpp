@@ -36,6 +36,10 @@ AProjectile::AProjectile()
     ProjectileMovement->ProjectileGravityScale = 0.f; // 직선 탄도. 곡사면 0.1~0.3
 
     InitialLifeSpan = 3.f; // 3초 뒤 자동 소멸
+
+    // 클라이언트에서도 로켓이 보이도록 복제한다.
+    bReplicates = true;
+    SetReplicateMovement(true);
 }
 
 void AProjectile::BeginPlay()
@@ -53,8 +57,43 @@ void AProjectile::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
     UPrimitiveComponent* OtherComp, FVector NormalImpulse,
     const FHitResult& Hit)
 {
+    /*
+        판정과 파괴는 서버만 수행한다.
+        클라이언트 사본도 충돌 이벤트를 받지만 여기서 처리하면
+        데미지가 이중 적용되거나 서버보다 먼저 사라진다.
+        (Destroy는 서버에서 호출하면 클라 사본까지 정리된다)
+    */
+    if (!HasAuthority())
+    {
+        return;
+    }
+
     HandleImpact(OtherActor, Hit);
-    Destroy();
+
+    /*
+        즉시 Destroy하면 방금 보낸 멀티캐스트가 일부 클라이언트에서 유실될 수 있다.
+        먼저 숨기고 짧은 수명을 준다.
+    */
+    SetActorEnableCollision(false);
+    if (ProjectileMovement)
+    {
+        ProjectileMovement->StopMovementImmediately();
+    }
+    SetActorHiddenInGame(true);
+    SetLifeSpan(0.2f);
+}
+
+void AProjectile::Multicast_PlayImpactFX_Implementation(FVector_NetQuantize Location, FVector_NetQuantizeNormal Normal)
+{
+    if (UNiagaraSystem* VFX = GetImpactVFX())
+    {
+        UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+            GetWorld(), VFX, Location, FVector(Normal).Rotation(), FVector(GetImpactFXScale()));
+    }
+    if (USoundBase* SFX = GetImpactSound())
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, SFX, Location);
+    }
 }
 
 void AProjectile::HandleImpact(AActor* HitActor, const FHitResult& Hit)
@@ -62,8 +101,7 @@ void AProjectile::HandleImpact(AActor* HitActor, const FHitResult& Hit)
     // 기본 투사체: 직접 맞은 대상 1명
     ACommonCharacter::ApplyDamageEffect(HitActor, DamageEffectClass, Damage, GetInstigator());
 
-    if (ImpactVFX)
-        UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, Hit.ImpactPoint, Hit.ImpactNormal.Rotation(), FVector(3.f));
-    if (ImpactSound)
-        UGameplayStatics::PlaySoundAtLocation(this, ImpactSound, Hit.ImpactPoint);
+    // 폭발 연출은 전 클라이언트로 멀티캐스트한다.
+    // 서버에서 직접 스폰하면 데디케이티드 서버에서는 아무에게도 보이지 않는다.
+    Multicast_PlayImpactFX(Hit.ImpactPoint, Hit.ImpactNormal);
 }

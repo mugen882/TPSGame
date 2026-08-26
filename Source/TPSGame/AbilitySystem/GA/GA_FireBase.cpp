@@ -15,6 +15,32 @@
 #include "Character/EnemyCharacter.h"
 #include "Common/AIBlackboardKeys.h"
 
+/*
+    Cue 실행용 예측 키 스코프.
+
+    FScopedPredictionWindow(ASC, Key) 생성자는 IsNetSimulating() == false 검사가 있어
+    서버에서만 동작한다. 클라이언트에서도 같은 키를 실어야 예측 재생과
+    중복 방지가 성립하므로 직접 세팅한다.
+*/
+struct FTPSScopedCueKey
+{
+    FTPSScopedCueKey(UAbilitySystemComponent* InASC, const FPredictionKey& Key)
+        : ASC(InASC)
+    {
+        if (ASC)
+        {
+            Saved = ASC->ScopedPredictionKey;
+            ASC->ScopedPredictionKey = Key;
+        }
+    }
+    ~FTPSScopedCueKey()
+    {
+        if (ASC) { ASC->ScopedPredictionKey = Saved; }
+    }
+    UAbilitySystemComponent* ASC = nullptr;
+    FPredictionKey Saved;
+};
+
 UGA_FireBase::UGA_FireBase()
 {
     InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -52,10 +78,10 @@ bool UGA_FireBase::ShouldFireImmediately(const FGameplayAbilityActorInfo* ActorI
 }
 
 bool UGA_FireBase::PlayFireMontage(const FGameplayAbilityActorInfo* ActorInfo, bool bEndAbilityOnMontageEnd)
-{
+{   
     ACommonCharacter* Character = ActorInfo ? Cast<ACommonCharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
     if (Character == nullptr)
-    {
+    {   
         return false;
     }
 
@@ -88,7 +114,8 @@ bool UGA_FireBase::PlayFireMontage(const FGameplayAbilityActorInfo* ActorInfo, b
         }
         Task->OnCompleted.AddDynamic(this, &UGA_FireBase::OnFireMontageEnded);
         Task->OnInterrupted.AddDynamic(this, &UGA_FireBase::OnFireMontageEnded);
-        Task->OnCancelled.AddDynamic(this, &UGA_FireBase::OnFireMontageEnded);
+        Task->OnCancelled.AddDynamic(this, &UGA_FireBase::OnFireMontageCancelled);
+        MontageStartTime = GetWorld()->GetTimeSeconds();
         Task->ReadyForActivation();
     }
     else
@@ -111,6 +138,14 @@ bool UGA_FireBase::PlayFireMontage(const FGameplayAbilityActorInfo* ActorInfo, b
 void UGA_FireBase::OnFireMontageEnded()
 {
     EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+}
+
+void UGA_FireBase::OnFireMontageCancelled()
+{
+    UE_LOG(TPSLog, Warning, TEXT("%s FireMontage 취소됨 (경과 %.3f초)"),
+        *TPSNetDebug::TPSNetPrefix(GetAvatarActorFromActorInfo()),
+        GetWorld()->GetTimeSeconds() - MontageStartTime);
+    OnFireMontageEnded();
 }
 
 void UGA_FireBase::ActivateAbility(
@@ -159,6 +194,7 @@ void UGA_FireBase::EndAbility(
     const FGameplayAbilityActivationInfo ActivationInfo,
     bool bReplicateEndAbility, bool bWasCancelled)
 {
+    bHasCachedAim = false;   // InstancedPerActor라 다음 활성화에 남으면 안 된다
     StopWaitForClientAim();
     Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
@@ -185,17 +221,22 @@ void UGA_FireBase::FireOnce(const FGameplayAbilityActorInfo* ActorInfo)
         // 카메라를 가진 머신에서만 조준점을 계산할 수 있다.
         const FVector AimPoint = ComputeLocalAimPoint(ActorInfo);
 
-        // 연출은 항상 로컬에서 즉시 재생한다 (예측).
-        Weapon->PlayFireCosmetic(AimPoint);
-
         if (bAuthority)
         {
-            // AI(서버에서 AIController가 조종) — 조준점을 스스로 알므로 왕복 없이 권위 발사
+            // AI(서버에서 AIController가 조종) — 조준점을 스스로 알므로 왕복 없이 권위 발사.
+            // 연출 Cue도 FireAuthoritative 안에서 실행되므로 여기서 따로 부르지 않는다.
             FireAuthoritative(ActorInfo, AimPoint);
         }
         else
         {
-            // 원격 클라 — 판정은 서버에 맡긴다
+            /*
+                원격 클라 — 판정은 서버에 맡기고 연출만 예측 재생한다.
+
+                ExecuteGameplayCue는 비권위 + 로컬 예측 키일 때 로컬에서만 실행된다.
+                이후 서버가 같은 예측 키로 멀티캐스트하면 GAS가 이 클라만 건너뛰므로
+                중복 재생되지 않는다.
+            */
+            PredictFireCues(ActorInfo, AimPoint);
             SendAimPointToServer(ActorInfo, AimPoint);
         }
     }
@@ -203,6 +244,13 @@ void UGA_FireBase::FireOnce(const FGameplayAbilityActorInfo* ActorInfo)
     {
         // 서버에서 원격 폰의 어빌리티가 실행된 경우. 조준점을 알 수 없으므로 기다린다.
         BeginWaitForClientAim(ActorInfo);
+
+        // 연사는 서버 루프가 발사를 주도한다. 캐시된 조준점이 있으면 바로 쏜다.
+        // (첫 발은 조준점 도착 전이라 캐시가 비어 있어 건너뛴다)
+        if (!ShouldEndAfterAuthoritativeShot() && bHasCachedAim)
+        {
+            FireAuthoritative(ActorInfo, CachedClientAim);
+        }
     }
 }
 
@@ -287,23 +335,46 @@ void UGA_FireBase::OnClientAimPointReceived(const FGameplayAbilityTargetDataHand
     const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
     const FGameplayAbilityActivationInfo ActivationInfo = GetCurrentActivationInfo();
 
+    const bool bSingleShot = ShouldEndAfterAuthoritativeShot();
+
     if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
     {
         // 소비하지 않으면 다음 발사에서 옛 조준점이 다시 잡힌다.
         ASC->ConsumeClientReplicatedTargetData(SpecHandle, ActivationInfo.GetActivationPredictionKey());
     }
 
-    StopWaitForClientAim();
+    /*
+        단발만 대기를 끝낸다.
+
+        연사는 모든 발이 같은 예측 키를 공유하므로 델리게이트를 계속 붙여둔 채
+        조준점을 받아야 한다. 여기서 해제하면 2발째부터 수신이 끊긴다.
+    */
+    if (bSingleShot)
+    {
+        StopWaitForClientAim();
+    }
 
     const FTPSTargetData_AimPoint* AimData =
         static_cast<const FTPSTargetData_AimPoint*>(Data.Get(0));
 
     if (AimData && AimData->GetScriptStruct() == FTPSTargetData_AimPoint::StaticStruct())
     {
-        FireAuthoritative(ActorInfo, AimData->AimPoint);
+        CachedClientAim = AimData->AimPoint;
+        bHasCachedAim = true;
+
+        /*
+            단발은 도착 시점에 바로 발사한다.
+            연사는 서버 타이머(FireLoop)가 발사를 주도하고 여기서는 캐시만 갱신한다.
+            도착 시점에 발사하면 네트워크 도착 간격에 발사 리듬이 종속되고,
+            같은 슬롯이 덮어써지면서 대부분의 발이 유실된다.
+        */
+        if (bSingleShot)
+        {
+            FireAuthoritative(ActorInfo, CachedClientAim);
+        }
     }
 
-    if (ShouldFireImmediately(ActorInfo) && ShouldEndAfterAuthoritativeShot())
+    if (bSingleShot)
     {
         EndAbility(SpecHandle, ActorInfo, ActivationInfo, true, false);
     }
@@ -311,10 +382,17 @@ void UGA_FireBase::OnClientAimPointReceived(const FGameplayAbilityTargetDataHand
 
 void UGA_FireBase::OnClientAimTimeout()
 {
-    UE_LOG(TPSLog, Warning, TEXT("%s 클라 조준점 미도착 — 발사 취소"),
+    UE_LOG(TPSLog, Warning, TEXT("%s 클라 조준점 미도착"),
         *TPSNetDebug::TPSNetPrefix(GetCurrentActorInfo() ? GetCurrentActorInfo()->AvatarActor.Get() : nullptr));
 
     StopWaitForClientAim();
+
+    // 연사는 한 발만 버리고 루프를 유지한다. 단발은 매달림 방지를 위해 종료.
+    if (!ShouldEndAfterAuthoritativeShot())
+    {
+        return;
+    }
+
     EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, true);
 }
 
@@ -364,7 +442,47 @@ void UGA_FireBase::FireAuthoritative(const FGameplayAbilityActorInfo* ActorInfo,
         return;   // 탄약과 쿨다운은 이미 소모됐다. 명중만 무효.
     }
 
-    Weapon->FireAuthoritative(ValidatedAim, Char->GetController());
+    FHitResult Hit;
+    Weapon->FireAuthoritative(ValidatedAim, Char->GetController(), Hit);
+
+    // 서버 권위 연출 — 예측 키를 실어 보내 소유 클라의 중복 재생을 막는다.
+    UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
+    if (!ASC) return;
+
+    FScopedPredictionWindow ScopedPrediction(ASC, GetCurrentActivationInfo().GetActivationPredictionKey());
+
+    Char->ExecuteFireCue();
+    if (Hit.bBlockingHit)
+    {
+        Char->ExecuteImpactCue(Hit.ImpactPoint, Hit.ImpactNormal);
+    }
+}
+
+void UGA_FireBase::PredictFireCues(const FGameplayAbilityActorInfo* ActorInfo, const FVector& AimPoint)
+{
+    ACommonCharacter* Char = GetOwningCharacter(ActorInfo);
+    UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+    if (!Char || !ASC) return;
+
+    AWeaponBase* Weapon = Char->GetCurrentWeapon();
+    if (!Weapon) return;
+
+    /*
+       Cue에 어빌리티 활성화 예측 키를 실어 보낸다.
+
+       클라: ExecuteGameplayCue가 로컬 키를 확인하고 로컬 재생만 수행
+       서버: 같은 키로 멀티캐스트 → 그 키를 발급한 클라만 건너뛴다
+   */
+    FTPSScopedCueKey ScopedCueKey(ASC, GetCurrentActivationInfo().GetActivationPredictionKey());
+
+    Char->ExecuteFireCue();
+
+    // 서버가 어디를 맞췄는지 모르므로 판정 없는 트레이스로 탄착 위치만 추정한다.
+    FHitResult Hit;
+    if (Weapon->TracePredictedImpact(AimPoint, Hit) && Hit.bBlockingHit)
+    {
+        Char->ExecuteImpactCue(Hit.ImpactPoint, Hit.ImpactNormal);
+    }
 }
 
 ACommonCharacter* UGA_FireBase::GetOwningCharacter(const FGameplayAbilityActorInfo* ActorInfo) const

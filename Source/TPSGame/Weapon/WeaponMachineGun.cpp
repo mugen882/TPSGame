@@ -51,7 +51,7 @@ void AWeaponMachineGun::Tick(float DeltaTime)
 	}
 }
 
-bool AWeaponMachineGun::FireInternal(const FVector& AimPoint, AController* InstigatorController)
+bool AWeaponMachineGun::FireInternal(const FVector& AimPoint, AController* InstigatorController, FHitResult& OutHit)
 {
 	const FVector Start = GetMuzzleLocation();
 	FVector Dir = (AimPoint - Start).GetSafeNormal();
@@ -66,16 +66,15 @@ bool AWeaponMachineGun::FireInternal(const FVector& AimPoint, AController* Insti
 
 	const FVector End = Start + Dir * FireRange;
 
-	FHitResult Hit;
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(this);
 	Params.AddIgnoredActor(GetOwner());
-	if (!GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Weapon, Params))
+	if (!GetWorld()->LineTraceSingleByChannel(OutHit, Start, End, ECC_Weapon, Params))
 	{
 		return true;   // 빗나가도 발사는 이뤄짐 → 탄약 소모
 	}
 
-	AActor* HitActor = Hit.GetActor();
+	AActor* HitActor = OutHit.GetActor();
 	if (!HitActor) return true;
 	if (Cast<ACommonCharacter>(HitActor))
 	{
@@ -98,25 +97,22 @@ FGameplayAttribute AWeaponMachineGun::GetAmmoAttribute() const
 	return UTPSAttributeSet::GetMachineGunAmmoAttribute();
 }
 
-void AWeaponMachineGun::FireCosmeticInternal(const FVector& AimPoint)
+bool AWeaponMachineGun::TracePredictedImpactInternal(const FVector& AimPoint, FHitResult& OutHit) const
 {
 	/*
-		연출 전용 트레이스. 데미지를 적용하지 않는다.
+		판정 없는 예측 트레이스.
 
-		서버의 권위 트레이스와 별개로 각 머신이 자기 화면의 탄착 이펙트를 만든다.
-		클라이언트가 서버 왕복을 기다리지 않고 즉시 피드백을 받게 하기 위함이다.
+		TODO(M2b-3): 권위 트레이스는 VRandCone 난수 퍼짐을 적용하는데 여기에는 없다.
+		             시드를 공유하지 않는 한 클라 탄착과 서버 판정이 어긋난다.
+		             머신건 연사 재설계 때 함께 해결할 것.
 	*/
 	const FVector Start = GetMuzzleLocation();
 	const FVector Dir = (AimPoint - Start).GetSafeNormal();
 	const FVector End = Start + Dir * FireRange;
 
-	FHitResult Hit;
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(this);
 	Params.AddIgnoredActor(GetOwner());
 
-	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Weapon, Params))
-	{
-		PlayImpactEffect(Hit);
-	}
+	return GetWorld()->LineTraceSingleByChannel(OutHit, Start, End, ECC_Weapon, Params);
 }

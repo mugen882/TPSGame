@@ -30,6 +30,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 	virtual void PossessedBy(AController* NewController) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	void SetFireTarget(AActor* Target);
@@ -105,6 +106,7 @@ private:
 	UPROPERTY()
 	TObjectPtr<AActor> PendingTarget = nullptr;  // 발사 예정 타깃 저장
 
+	UPROPERTY(Replicated)
 	bool bHoldingAim = false;
 
 	float LastHitTime = 0.f;

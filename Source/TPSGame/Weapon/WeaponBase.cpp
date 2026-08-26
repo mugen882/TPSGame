@@ -18,11 +18,11 @@ AWeaponBase::AWeaponBase()
 	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
-void AWeaponBase::PlayImpactEffect(const FHitResult& Hit)
+void AWeaponBase::PlayImpactEffectAt(const FVector& Location, const FVector& Normal)
 {
 	if (ImpactEffect)
 	{
-		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactEffect, Hit.ImpactPoint, Hit.ImpactNormal.Rotation());
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactEffect, Location, Normal.Rotation());
 	}
 }
 
@@ -37,17 +37,15 @@ FGameplayAttribute AWeaponBase::GetAmmoAttribute() const
 	return FGameplayAttribute();
 }
 
-bool AWeaponBase::FireAuthoritative(const FVector& AimPoint, AController* InstigatorController)
+bool AWeaponBase::FireAuthoritative(const FVector& AimPoint, AController* InstigatorController, FHitResult& OutHit)
 {
-	// 서버 권위 판정. 연출은 PlayFireCosmetic이 따로 담당한다.
-	return FireInternal(AimPoint, InstigatorController);
+	// 서버 권위 판정. 연출은 호출부(어빌리티)가 GameplayCue로 실행한다.
+	return FireInternal(AimPoint, InstigatorController, OutHit);
 }
 
-void AWeaponBase::PlayFireCosmetic(const FVector& AimPoint)
+bool AWeaponBase::TracePredictedImpact(const FVector& AimPoint, FHitResult& OutHit) const
 {
-	ShowMuzzleFlash();
-	PlayFireSound();
-	FireCosmeticInternal(AimPoint);
+	return TracePredictedImpactInternal(AimPoint, OutHit);
 }
 
 FVector AWeaponBase::GetMuzzleLocation() const

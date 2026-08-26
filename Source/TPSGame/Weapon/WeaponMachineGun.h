@@ -27,10 +27,10 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaTime) override;
-	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController) override;
+	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController, FHitResult& OutHit) override;
 
-	// 판정 없는 탄착 연출 (로컬 예측)
-	virtual void FireCosmeticInternal(const FVector& AimPoint) override;
+	// 판정 없는 탄착 예측 (클라 연출용)
+	virtual bool TracePredictedImpactInternal(const FVector& AimPoint, FHitResult& OutHit) const override;
 
 	UFUNCTION()
 	void AmmoReload();

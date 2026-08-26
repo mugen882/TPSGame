@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
+#include "GameplayCueInterface.h"
 #include "Weapon/WeaponManagerComponent.h"
 #include "CommonCharacter.generated.h"
 
@@ -30,7 +31,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAmmoChanged, int32, NewCurrentAm
 */
 
 UCLASS()
-class TPSGAME_API ACommonCharacter : public ACharacter, public IAbilitySystemInterface
+class TPSGAME_API ACommonCharacter : public ACharacter, public IAbilitySystemInterface, public IGameplayCueInterface
 {
 	GENERATED_BODY()
 
@@ -75,6 +76,30 @@ public:
 	void SpawnWeapons();
 
 	void BroadcastAmmo();
+
+	/*
+		발사 연출 GameplayCue 실행.
+
+		서버에서 호출하면 모든 클라이언트로 멀티캐스트되고,
+		소유 클라이언트에서 예측 키와 함께 호출하면 로컬에서만 재생된다.
+		같은 예측 키를 쓰면 GAS가 중복 재생을 막아준다.
+	*/
+	void ExecuteFireCue();
+	void ExecuteImpactCue(const FVector& Location, const FVector& Normal);
+
+	/*
+		GameplayCue 핸들러 — IGameplayCueInterface
+
+		함수 이름이 곧 태그다. GameplayCue.Weapon.Fire -> GameplayCue_Weapon_Fire.
+		GameplayCueManager가 리플렉션으로 찾아 호출하므로
+		Cue Notify 애셋도, 스캔 경로도, 애셋 이름 규칙도 필요 없다.
+	*/
+	UFUNCTION(BlueprintCallable, Category = "GameplayCue", meta = (BlueprintProtected = "true"))
+	void GameplayCue_Weapon_Fire(EGameplayCueEvent::Type EventType, const FGameplayCueParameters& Parameters);
+
+	UFUNCTION(BlueprintCallable, Category = "GameplayCue", meta = (BlueprintProtected = "true"))
+	void GameplayCue_Weapon_Impact(EGameplayCueEvent::Type EventType, const FGameplayCueParameters& Parameters);
+
 
 	/*
 		현재 무기의 탄약 조회.
@@ -131,6 +156,8 @@ protected:
 
 	virtual void HandleDeath();
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	virtual void HandleHealthChanged(const struct FOnAttributeChangeData& Data);
 
 	// 탄약 어트리뷰트 변경 → 탄약 UI 갱신 (예측 차감과 서버 확정 양쪽에서 발화)
@@ -148,7 +175,16 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon")
 	TObjectPtr<UWeaponManagerComponent> WeaponManager;
 
-	UPROPERTY()
+	/*
+		가해자. 방향성 비네트와 적 AI의 반격 판단에 쓰인다.
+
+		PostGameplayEffectExecute는 서버에서만 실행되므로 서버만 이 값을 안다.
+		클라이언트는 체력 복제로 피격은 알지만 "어디서 맞았는지"를 알 수 없어
+		방향성 비네트가 나오지 않았다. 그래서 복제한다.
+
+		COND_OwnerOnly: 남이 누구에게 맞았는지는 알 필요가 없다.
+	*/
+	UPROPERTY(Replicated)
 	TObjectPtr<AActor> LastDamageInstigator = nullptr;
 
 	UPROPERTY(VisibleAnywhere, Category = "GAS")
@@ -157,6 +193,16 @@ protected:
 private:
 	UFUNCTION()
 	void HandleWeaponHitConfirmed();
+
+	/*
+		히트마커.
+
+		명중 판정은 서버에서만 일어나므로(FireInternal) OnHitConfirmed도
+		서버에서만 발화한다. 사격자의 크로스헤어에 표시하려면 소유 클라에게
+		따로 알려야 한다.
+	*/
+	UFUNCTION(Client, reliable)
+	void Client_NotifyHitConfirmed();
 
 	UFUNCTION()
 	void ChangeWeapon(EWeaponType WeaponType);
@@ -177,4 +223,6 @@ private:
 
 	// 델리게이트 중복 바인딩 방지
 	bool bAttributeDelegatesBound = false;
+
+	bool bWasPlayingLastFrame = false;
 };

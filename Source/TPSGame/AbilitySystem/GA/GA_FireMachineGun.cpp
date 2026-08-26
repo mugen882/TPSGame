@@ -100,6 +100,13 @@ void UGA_FireMachineGun::FireLoop()
             Aim->NotifyFired();
     }
 
+    // 머신건 연사 서버 반영 (임시 대응)
+    if (!CommitAbilityCost(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo))
+    {
+        EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+        return;
+    }
+
     FireOnce(GetCurrentActorInfo());
 }
 

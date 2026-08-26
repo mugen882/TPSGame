@@ -28,14 +28,15 @@ public:
 	/*
 		발사가 권위 경로와 연출 경로로 나뉘었다.
 
-		FireAuthoritative : 서버 전용. 트레이스 / 투사체 스폰 / 데미지 적용.
-		PlayFireCosmetic  : 실행되는 모든 머신. 머즐 플래시 / 발사음 / 임팩트 연출.
+		FireAuthoritative   : 서버 전용. 트레이스 / 투사체 스폰 / 데미지 적용.
+		TracePredictedImpact: 클라 전용. 판정 없이 탄착 지점만 예측한다.
 
-		이전에는 Fire() 하나가 둘 다 했기 때문에, 클라이언트가 발사할 때
-		클라이언트에서 트레이스하고 데미지까지 적용하는 클라 권위 구조였다.
+		둘 다 명중 지점을 OutHit으로 돌려준다. 연출(GameplayCue)은 호출부인
+		어빌리티가 실행하는데, Cue를 예측 키와 함께 실행해야 중복 재생이
+		방지되기 때문이다. 무기는 예측 키를 알지 못하므로 판정만 담당한다.
 	*/
-	bool FireAuthoritative(const FVector& AimPoint, AController* InstigatorController);
-	void PlayFireCosmetic(const FVector& AimPoint);
+	bool FireAuthoritative(const FVector& AimPoint, AController* InstigatorController, FHitResult& OutHit);
+	bool TracePredictedImpact(const FVector& AimPoint, FHitResult& OutHit) const;
 
 	/*
 		이 무기가 소비하는 탄약 어트리뷰트.
@@ -56,7 +57,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Weapon")
 	FOnWeaponHitConfirmed OnHitConfirmed;
 
-	void PlayImpactEffect(const FHitResult& Hit);
+
+	// GameplayCue가 파라미터(위치/노멀)로 호출하는 버전
+	void PlayImpactEffectAt(const FVector& Location, const FVector& Normal);
 
 	FORCEINLINE const float GetFireInterval() { return FireInterval; }
 
@@ -74,23 +77,21 @@ protected:
 
 	// 파생 클래스가 실제 발사 메커니즘 구현 (히트스캔/투사체 등).
 	// 서버에서만 호출된다. 데미지 적용은 여기서만 일어난다.
-	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController)
+	// 명중했으면 OutHit을 채운다. 투사체 무기는 채우지 않는다.
+	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController, FHitResult& OutHit)
 		PURE_VIRTUAL(AWeaponBase::FireInternal, return false;);
 
 	/*
-		판정 없는 연출 전용 트레이스. 데미지를 적용하지 않는다.
+		판정 없는 예측 트레이스. 데미지를 적용하지 않는다.
 
-		호출된 머신에서만 실행된다. 클라이언트는 서버 왕복을 기다리지 않고
-		즉시 탄착 피드백을 받고, 서버는 자기 권위 트레이스를 따로 돌린다.
-
-		TODO(M2b-2): 적 발사는 서버에서만 호출되므로 데디케이티드 서버에서는
-					 아무에게도 보이지 않는다. 또 플레이어 발사 연출도 남의
-					 화면에는 전달되지 않는다. GameplayCue로 이관해야 한다.
+		클라이언트가 서버 왕복을 기다리지 않고 즉시 탄착 연출을 띄우기 위한 것.
+		투사체 무기는 클라가 투사체를 스폰하면 안 되므로 오버라이드하지 않는다.
 	*/
-	virtual void FireCosmeticInternal(const FVector& /*AimPoint*/) {}
+	virtual bool TracePredictedImpactInternal(const FVector& /*AimPoint*/, FHitResult& /*OutHit*/) const { return false; }
 
+public:
+	// GameplayCue에서 호출된다.
 	void ShowMuzzleFlash();
-
 	void PlayFireSound();
 
 protected:

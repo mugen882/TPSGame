@@ -25,7 +25,7 @@ public:
 	virtual FGameplayAttribute GetAmmoAttribute() const override;
 
 protected:
-	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController) override;
+	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController, FHitResult& OutHit) override;
 
 	UPROPERTY(EditAnywhere, Category = "Weapon|Rocket")
 	TSubclassOf<AProjectile> ProjectileClass;
