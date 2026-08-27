@@ -27,4 +27,7 @@ protected:
 
 	// 판정 없는 탄착 예측 (클라 연출용)
 	virtual bool TracePredictedImpactInternal(const FVector& AimPoint, FHitResult& OutHit) const override;
+
+	// 퍼짐이 없어 클라 예측과 서버 판정이 정확히 일치한다.
+	virtual bool SupportsPredictedImpact() const override { return true; }
 };

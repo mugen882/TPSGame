@@ -97,22 +97,3 @@ FGameplayAttribute AWeaponMachineGun::GetAmmoAttribute() const
 	return UTPSAttributeSet::GetMachineGunAmmoAttribute();
 }
 
-bool AWeaponMachineGun::TracePredictedImpactInternal(const FVector& AimPoint, FHitResult& OutHit) const
-{
-	/*
-		판정 없는 예측 트레이스.
-
-		TODO(M2b-3): 권위 트레이스는 VRandCone 난수 퍼짐을 적용하는데 여기에는 없다.
-		             시드를 공유하지 않는 한 클라 탄착과 서버 판정이 어긋난다.
-		             머신건 연사 재설계 때 함께 해결할 것.
-	*/
-	const FVector Start = GetMuzzleLocation();
-	const FVector Dir = (AimPoint - Start).GetSafeNormal();
-	const FVector End = Start + Dir * FireRange;
-
-	FCollisionQueryParams Params;
-	Params.AddIgnoredActor(this);
-	Params.AddIgnoredActor(GetOwner());
-
-	return GetWorld()->LineTraceSingleByChannel(OutHit, Start, End, ECC_Weapon, Params);
-}

@@ -194,7 +194,6 @@ void UGA_FireBase::EndAbility(
     const FGameplayAbilityActivationInfo ActivationInfo,
     bool bReplicateEndAbility, bool bWasCancelled)
 {
-    bHasCachedAim = false;   // InstancedPerActor라 다음 활성화에 남으면 안 된다
     StopWaitForClientAim();
     Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
@@ -244,13 +243,6 @@ void UGA_FireBase::FireOnce(const FGameplayAbilityActorInfo* ActorInfo)
     {
         // 서버에서 원격 폰의 어빌리티가 실행된 경우. 조준점을 알 수 없으므로 기다린다.
         BeginWaitForClientAim(ActorInfo);
-
-        // 연사는 서버 루프가 발사를 주도한다. 캐시된 조준점이 있으면 바로 쏜다.
-        // (첫 발은 조준점 도착 전이라 캐시가 비어 있어 건너뛴다)
-        if (!ShouldEndAfterAuthoritativeShot() && bHasCachedAim)
-        {
-            FireAuthoritative(ActorInfo, CachedClientAim);
-        }
     }
 }
 
@@ -335,49 +327,28 @@ void UGA_FireBase::OnClientAimPointReceived(const FGameplayAbilityTargetDataHand
     const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
     const FGameplayAbilityActivationInfo ActivationInfo = GetCurrentActivationInfo();
 
-    const bool bSingleShot = ShouldEndAfterAuthoritativeShot();
-
     if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
     {
         // 소비하지 않으면 다음 발사에서 옛 조준점이 다시 잡힌다.
         ASC->ConsumeClientReplicatedTargetData(SpecHandle, ActivationInfo.GetActivationPredictionKey());
     }
 
-    /*
-        단발만 대기를 끝낸다.
-
-        연사는 모든 발이 같은 예측 키를 공유하므로 델리게이트를 계속 붙여둔 채
-        조준점을 받아야 한다. 여기서 해제하면 2발째부터 수신이 끊긴다.
-    */
-    if (bSingleShot)
-    {
-        StopWaitForClientAim();
-    }
+    StopWaitForClientAim();
 
     const FTPSTargetData_AimPoint* AimData =
         static_cast<const FTPSTargetData_AimPoint*>(Data.Get(0));
 
     if (AimData && AimData->GetScriptStruct() == FTPSTargetData_AimPoint::StaticStruct())
     {
-        CachedClientAim = AimData->AimPoint;
-        bHasCachedAim = true;
-
-        /*
-            단발은 도착 시점에 바로 발사한다.
-            연사는 서버 타이머(FireLoop)가 발사를 주도하고 여기서는 캐시만 갱신한다.
-            도착 시점에 발사하면 네트워크 도착 간격에 발사 리듬이 종속되고,
-            같은 슬롯이 덮어써지면서 대부분의 발이 유실된다.
-        */
-        if (bSingleShot)
-        {
-            FireAuthoritative(ActorInfo, CachedClientAim);
-        }
+        FireAuthoritative(ActorInfo, AimData->AimPoint);
     }
-
-    if (bSingleShot)
+    else
     {
-        EndAbility(SpecHandle, ActorInfo, ActivationInfo, true, false);
+        UE_LOG(TPSLog, Warning, TEXT("%s 예상치 못한 TargetData 타입 — 발사 무시"),
+            *TPSNetDebug::TPSNetPrefix(ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr));
     }
+
+    EndAbility(SpecHandle, ActorInfo, ActivationInfo, true, false);
 }
 
 void UGA_FireBase::OnClientAimTimeout()
@@ -386,12 +357,6 @@ void UGA_FireBase::OnClientAimTimeout()
         *TPSNetDebug::TPSNetPrefix(GetCurrentActorInfo() ? GetCurrentActorInfo()->AvatarActor.Get() : nullptr));
 
     StopWaitForClientAim();
-
-    // 연사는 한 발만 버리고 루프를 유지한다. 단발은 매달림 방지를 위해 종료.
-    if (!ShouldEndAfterAuthoritativeShot())
-    {
-        return;
-    }
 
     EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, true);
 }
@@ -449,11 +414,37 @@ void UGA_FireBase::FireAuthoritative(const FGameplayAbilityActorInfo* ActorInfo,
     UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
     if (!ASC) return;
 
-    FScopedPredictionWindow ScopedPrediction(ASC, GetCurrentActivationInfo().GetActivationPredictionKey());
-
-    Char->ExecuteFireCue();
-    if (Hit.bBlockingHit)
+    // 발사 연출: 예측 키를 실어 보내 사격자의 중복 재생을 막는다.
     {
+        FScopedPredictionWindow ScopedPrediction(ASC, GetCurrentActivationInfo().GetActivationPredictionKey());
+        Char->ExecuteFireCue();
+    }
+
+    if (!Hit.bBlockingHit) return;
+
+    /*
+        탄착 연출은 무기가 예측을 지원하는지에 따라 갈린다.
+
+        지원(라이플)  : 예측 키를 실어 보낸다 → 사격자는 건너뛰고 나머지만 재생
+        미지원(머신건): 키 없이 보낸다 → 사격자 포함 전원이 서버 탄착을 재생
+
+        난수 퍼짐이 있는 무기는 클라 예측이 서버와 일치할 수 없으므로
+        예측을 포기하고 서버 결과 하나만 보여준다.
+    */
+    if (Weapon->SupportsPredictedImpact())
+    {
+        FScopedPredictionWindow ScopedPrediction(ASC, GetCurrentActivationInfo().GetActivationPredictionKey());
+        Char->ExecuteImpactCue(Hit.ImpactPoint, Hit.ImpactNormal);
+    }
+    else
+    {
+        /*
+			ServerSetReplicatedTargetData가 델리게이트를 브로드캐스트하기 전에
+			클라 예측 키로 스코프를 열어둔다. 그래서 여기서 아무것도 하지 않으면
+			그 키가 그대로 실려 나가 사격자가 Cue를 건너뛴다.
+			예측하지 않은 무기는 사격자도 서버 탄착을 봐야 하므로 무효 키로 덮는다.
+		*/
+        FTPSScopedCueKey ScopedCueKey(ASC, FPredictionKey());
         Char->ExecuteImpactCue(Hit.ImpactPoint, Hit.ImpactNormal);
     }
 }

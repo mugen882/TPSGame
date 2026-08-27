@@ -75,6 +75,22 @@ void APlayerCharacter::Tick(float DeltaTime)
 
     if (AimComponent)
         AimComponent->UpdateCameraInterpolation(DeltaTime);
+
+    /*
+        [M2b-3] 연사는 입력 홀드 반복으로 구현한다.
+
+        어빌리티 내부 타이머로 돌리면 모든 발사가 단일 예측 키를 공유해
+        Cost / 쿨다운 / 조준점이 발당으로 짝지어지지 않는다.
+        매 틱 활성화를 시도하되 쿨다운 GE가 발사 간격을 강제하므로
+        간격보다 빨리 나가지 않는다.
+
+        쿨다운 중의 시도는 CanActivateAbility에서 태그 검사만으로 걸러지고
+        서버로 RPC가 나가지 않으므로 비용이 거의 없다.
+    */
+    if (bFireInputHeld && IsLocallyControlled())
+    {
+        TryFire();
+    }
 }
 
 void APlayerCharacter::NotifyControllerChanged()

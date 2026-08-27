@@ -39,6 +39,18 @@ public:
 	bool TracePredictedImpact(const FVector& AimPoint, FHitResult& OutHit) const;
 
 	/*
+		클라이언트가 탄착 지점을 예측할 수 있는 무기인가.
+
+		서버가 탄착 Cue를 어떤 방식으로 보낼지 결정한다.
+		  true  : 예측 키를 실어 보내 사격자는 건너뛰게 한다.
+		  false : 키 없이 보내 사격자 포함 전원이 서버 탄착을 재생한다.
+
+		머신건처럼 난수 퍼짐이 있는 무기는 클라와 서버의 탄착이 일치할 수 없으므로
+		예측하지 않고 서버 결과 하나만 보여준다.
+	*/
+	virtual bool SupportsPredictedImpact() const { return false; }
+
+	/*
 		이 무기가 소비하는 탄약 어트리뷰트.
 
 		탄약이 UTPSAttributeSet으로 이관되면서, "어떤 탄약 풀을 쓰는가"를

@@ -13,6 +13,15 @@ class UGameplayEffect;
 	히스트캔방식 사용
 */
 
+/*
+	[M2b-3] 예측 탄착을 하지 않는다.
+
+	FireInternal이 VRandCone 난수 퍼짐을 적용하므로 클라가 아무리 정확히
+	트레이스해도 서버와 다른 지점을 맞춘다. 예측을 포기하고 서버 탄착
+	하나만 전원에게 보여주는 편이 정확하다.
+	(SupportsPredictedImpact가 false를 반환하므로 서버가 예측 키 없이 Cue를 보낸다)
+*/
+
 UCLASS()
 class TPSGAME_API AWeaponMachineGun : public AWeaponBase
 {
@@ -28,9 +37,6 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaTime) override;
 	virtual bool FireInternal(const FVector& AimPoint, AController* InstigatorController, FHitResult& OutHit) override;
-
-	// 판정 없는 탄착 예측 (클라 연출용)
-	virtual bool TracePredictedImpactInternal(const FVector& AimPoint, FHitResult& OutHit) const override;
 
 	UFUNCTION()
 	void AmmoReload();

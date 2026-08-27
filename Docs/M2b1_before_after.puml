@@ -1,0 +1,240 @@
+' =====================================================================
+'  TPSGame M2b-1 : 발사 서버 권위화 — 변경 전/후
+'  렌더링: https://www.plantuml.com/plantuml  또는 VSCode PlantUML 확장
+' =====================================================================
+
+@startuml M2b1_Before
+title M2b-1 이전 — 클라이언트 권위 (GA_FireBase = LocalOnly)
+
+skinparam sequenceMessageAlign center
+skinparam BoxPadding 10
+
+box "클라이언트 A (사격자)" #E8F4FF
+  participant "APlayerCharacter" as PC
+  participant "UGA_FireBase" as GA
+  participant "AWeaponBase" as W
+  participant "UTPSAttributeSet\n(자기)" as AS
+  participant "AEnemyCharacter\n(로컬 사본)" as EN
+end box
+
+box "데디케이티드 서버" #FFF0F0
+  participant "UGA_FireBase" as SGA
+  participant "AEnemyCharacter\n(권위)" as SEN
+end box
+
+box "클라이언트 B" #F0FFF0
+  participant "AEnemyCharacter\n(로컬 사본)" as EN2
+end box
+
+PC -> GA : TryActivateAbilitiesByTag
+activate GA
+
+GA -> GA : CanActivateAbility\n(CheckCost)
+GA -> AS : ApplyCost (Cost GE)
+note right of AS
+  클라 로컬에서만 탄약 감소.
+  서버 값은 그대로이므로
+  복제가 아예 발생하지 않는다.
+end note
+
+GA -> W : Fire(AimPoint, Controller)
+activate W
+W -> W : FireInternal()\nLineTrace
+W -> EN : ApplyDamageEffect()
+note right of EN
+  **트레이스와 데미지가 클라에서 실행**
+  피해자 ASC로 스펙을 만들어
+  자기 자신에게 적용한다.
+end note
+W -> W : ShowMuzzleFlash\nPlayFireSound\nPlayImpactEffect
+deactivate W
+
+GA -> GA : EndAbility
+deactivate GA
+
+... 서버는 발사 사실을 전혀 모른다 ...
+
+note over SGA, SEN #FFCCCC
+  **어빌리티가 서버에서 실행되지 않음**
+  적 체력 변화 없음 / 검증 없음 / 치트 방어 없음
+end note
+
+note over EN2 #FFCCCC
+  클라 B 화면에서는
+  적 체력이 줄지 않는다
+end note
+
+@enduml
+
+
+@startuml M2b1_After
+title M2b-1 이후 — 서버 권위 + 클라 예측 (GA_FireBase = LocalPredicted)
+
+skinparam sequenceMessageAlign center
+skinparam BoxPadding 10
+
+box "클라이언트 A (사격자)" #E8F4FF
+  participant "APlayerCharacter" as PC
+  participant "UGA_FireBase\n(예측 인스턴스)" as GA
+  participant "AWeaponBase" as W
+  participant "UTPSAttributeSet" as AS
+end box
+
+box "데디케이티드 서버" #FFF0F0
+  participant "UGA_FireBase\n(권위 인스턴스)" as SGA
+  participant "AWeaponBase" as SW
+  participant "ACommonCharacter" as SCC
+  participant "UTPSAttributeSet\n(적)" as SAS
+end box
+
+box "클라이언트 B" #F0FFF0
+  participant "UTPSAttributeSet\n(적 사본)" as AS2
+  participant "UHealthBarWidget" as HB2
+end box
+
+PC -> GA : TryActivateAbilitiesByTag
+activate GA
+GA -> GA : CanActivateAbility (CheckCost)
+GA -> GA : **PredictionKey 발급**
+
+GA ->> SGA : ServerTryActivateAbility(SpecHandle, PredKey)
+activate SGA
+note right of SGA
+  서버가 **독립적으로 재검증**
+  CanActivateAbility / CheckCost
+  → 조작된 요청은 여기서 차단
+end note
+
+== 클라: 예측 실행 ==
+GA -> AS : ApplyCost (Cost GE + PredictionKey)
+note right of AS : 예측 차감 — 즉시 UI 반영\n서버 거부 시 롤백 가능
+GA -> GA : PlayFireMontage (연출)
+GA -> GA : FireOnce()
+GA -> GA : ComputeLocalAimPoint()\n(카메라 기준)
+GA -> W : PlayFireCosmetic(AimPoint)
+activate W
+W -> W : 머즐 / 사운드 /\nFireCosmeticInternal (판정 없는 트레이스)
+deactivate W
+
+GA ->> SGA : **ServerSetReplicatedTargetData**\n(FTPSTargetData_AimPoint, PredKey)
+note left
+  FScopedPredictionWindow 안에서 전송.
+  예측 키가 있어야 서버가 "어느 발사에
+  대한 조준점인지" 짝지을 수 있다.
+end note
+GA -> GA : EndAbility (대기 없음)
+deactivate GA
+
+== 서버: 권위 판정 ==
+SGA -> SGA : ApplyCost (권위 차감)
+SGA -> SGA : FireOnce()\nbLocal=false, bAuthority=true
+SGA -> SGA : BeginWaitForClientAim()\n+ 타임아웃 1초
+SGA -> SGA : OnClientAimPointReceived()
+SGA -> SGA : ConsumeClientReplicatedTargetData()
+SGA -> SGA : **ValidateAimPoint()**
+note right of SGA
+  사거리 초과 → 클램프
+  후방 조준 → 거부
+  총구는 **서버 자기 무기** 기준
+end note
+
+SGA -> SW : FireAuthoritative(ValidatedAim)
+activate SW
+SW -> SW : FireInternal()\nLineTrace (권위)
+SW -> SCC : ApplyDamageEffect()
+deactivate SW
+activate SCC
+note right of SCC
+  **가해자 ASC**로 스펙 생성
+  SourceASC->ApplyGameplayEffectSpecToTarget
+  → 킬 어트리뷰션 정상
+  (HasAuthority 게이트 있음)
+end note
+SCC -> SAS : Health BaseValue 감소
+deactivate SCC
+SGA -> SGA : EndAbility
+deactivate SGA
+
+== 복제 ==
+SAS ->> AS2 : Health 어트리뷰트 복제\n(COND_None, REPNOTIFY_Always)
+activate AS2
+AS2 -> AS2 : OnRep_Health()\nGAMEPLAYATTRIBUTE_REPNOTIFY
+AS2 -> HB2 : 어트리뷰트 변경 델리게이트
+deactivate AS2
+note right of HB2 : **모든 클라 화면에서\n적 체력바 감소**
+
+SAS ->> AS : RifleAmmo 복제\n(COND_OwnerOnly)
+note right of AS : 예측이 맞았으면 같은 값,\n틀렸으면 여기서 교정
+
+@enduml
+
+
+@startuml M2b1_WeaponSplit
+title M2b-1 — AWeaponBase 발사 경로 분리
+
+skinparam classAttributeIconSize 0
+
+class AWeaponBase {
+  .. M2b-1 이전 ..
+  -- <s>bool Fire(AimPoint, Controller)</s> --
+  <s>트레이스 + 데미지 + 연출을 한 함수에서</s>
+  ==
+  .. M2b-1 이후 ..
+  +bool FireAuthoritative(AimPoint, Controller)
+  +void PlayFireCosmetic(AimPoint)
+  --
+  #virtual bool FireInternal(AimPoint, Controller) = 0
+  #virtual void FireCosmeticInternal(AimPoint)
+}
+
+note right of AWeaponBase::FireAuthoritative
+  **서버 전용 규약**
+  트레이스 / 투사체 스폰 / 데미지
+  함수 자체는 권위를 검사하지 않는다.
+  실제 방어선은 ApplyDamageEffect의
+  HasAuthority() 게이트.
+end note
+
+note right of AWeaponBase::PlayFireCosmetic
+  **호출된 머신에서만 실행**
+  머즐 / 사운드 / 탄착
+
+  TODO(M2b-2): 적 발사는 서버에서만
+  호출되므로 데디에서는 아무에게도
+  보이지 않는다. GameplayCue 필요.
+end note
+
+class AWeaponRifle {
+  #FireInternal()  : 트레이스 + 데미지
+  #FireCosmeticInternal() : 판정 없는 트레이스 → 탄착
+}
+
+class AWeaponMachineGun {
+  #FireInternal()  : VRandCone 퍼짐 + 데미지
+  #FireCosmeticInternal() : 퍼짐 없는 트레이스
+}
+
+class AWeaponRocketLauncher {
+  #FireInternal()  : 투사체 스폰 (서버만)
+  ..
+  FireCosmeticInternal 미구현
+  (투사체를 클라가 스폰하면 안 됨)
+}
+
+AWeaponBase <|-- AWeaponRifle
+AWeaponBase <|-- AWeaponMachineGun
+AWeaponBase <|-- AWeaponRocketLauncher
+
+note bottom of AWeaponMachineGun
+  **알려진 한계 (M2b-3)**
+  권위 트레이스는 VRandCone 난수 퍼짐을 쓰는데
+  연출 트레이스는 퍼짐이 없다. 시드를 공유하지
+  않는 한 클라 탄착과 서버 판정이 어긋난다.
+end note
+
+note bottom of AWeaponRocketLauncher
+  로켓 투사체가 서버에만 스폰되어
+  클라에서 보이지 않는다. (M2b-2)
+end note
+
+@enduml

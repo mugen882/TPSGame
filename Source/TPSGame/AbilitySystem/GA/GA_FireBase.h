@@ -79,14 +79,6 @@ protected:
     // 서버가 클라 조준점을 기다리는 중인지 (연사 루프가 중복 요청하지 않도록)
     bool IsWaitingForClientAim() const { return TargetDataDelegateHandle.IsValid(); }
 
-    /*
-        권위 발사 1회 후 어빌리티를 끝낼지.
-
-        단발 무기는 true. 연사(머신건)는 루프가 계속 돌아야 하므로 false.
-        서버가 조준점을 기다렸다가 발사하는 경로에서 이 분기가 필요하다.
-    */
-    virtual bool ShouldEndAfterAuthoritativeShot() const { return true; }
-
 private:
     // 로컬 머신에서 조준점을 계산한다. 서버(원격 폰)에서는 의미가 없다.
     FVector ComputeLocalAimPoint(const FGameplayAbilityActorInfo* ActorInfo) const;
@@ -154,10 +146,6 @@ private:
 
     FDelegateHandle TargetDataDelegateHandle;
     FTimerHandle    ClientAimTimeoutTimer;
-
-    // 연사용 최근 조준점 캐시. 서버 루프가 이 값으로 발사한다.
-    FVector CachedClientAim = FVector::ZeroVector;
-    bool    bHasCachedAim = false;
 
     // GA_FireBase.h — private
     // 진단용 — M2b-3 이후 제거
