@@ -11,6 +11,7 @@
 #include "Weapon/WeaponBase.h"
 #include "UI/HealthBarWidget.h"
 #include "Weapon/WeaponManagerComponent.h"
+#include "Network/LagCompensationComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Common/TPSLog.h"
 
@@ -31,6 +32,8 @@ ACommonCharacter::ACommonCharacter()
     AttributeSet = CreateDefaultSubobject<UTPSAttributeSet>(TEXT("AttributeSet"));
 
     WeaponManager = CreateDefaultSubobject<UWeaponManagerComponent>(TEXT("WeaponManager"));
+
+    LagCompensation = CreateDefaultSubobject<ULagCompensationComponent>(TEXT("LagCompensation"));
 
     OnWeaponChanged.AddDynamic(this, &ACommonCharacter::ChangeWeapon);
 }
@@ -290,23 +293,6 @@ void ACommonCharacter::SpawnWeapons()
 void ACommonCharacter::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
-
-    // 임시 진단용
-    if (!HasAuthority() && GetLocalRole() == ROLE_SimulatedProxy)
-    {
-        if (UAnimInstance* Anim = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
-        {
-            if (Anim->Montage_IsPlaying(FireMontage))
-            {
-                UE_LOG(TPSLog, Warning, TEXT("%s 위치 %.3f / %.3f, 슬롯가중치 %.2f"),
-                    *TPSNetDebug::TPSNetPrefix(this),
-                    Anim->Montage_GetPosition(FireMontage),
-                    FireMontage->GetPlayLength(),
-                    Anim->GetSlotMontageLocalWeight(TEXT("UpperBody")));   // 실제 슬롯 이름으로
-            }
-            bWasPlayingLastFrame = Anim->Montage_IsPlaying(FireMontage);
-        }
-    }
 }
 
 void ACommonCharacter::GrantDefaultAbilities()

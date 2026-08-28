@@ -10,6 +10,7 @@
 class UAbilitySystemComponent;
 class UTPSAttributeSet;
 class AWeaponBase;
+class ULagCompensationComponent;
 class UGameplayEffect;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnHitConfirmed);
@@ -197,6 +198,15 @@ protected:
 	TObjectPtr<UWeaponManagerComponent> WeaponManager;
 
 	/*
+		랙 보상용 히트박스 히스토리.
+
+		서버에서만 기록하며, 발사 판정 시 사격자의 지연만큼 되감는 데 쓰인다.
+		적과 플레이어 모두 되감기 대상이므로 공용 베이스에 둔다.
+	*/
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Network")
+	TObjectPtr<ULagCompensationComponent> LagCompensation;
+
+	/*
 		가해자. 방향성 비네트와 적 AI의 반격 판단에 쓰인다.
 
 		PostGameplayEffectExecute는 서버에서만 실행되므로 서버만 이 값을 안다.
@@ -251,6 +261,4 @@ private:
 
 	// 사망 연출 1회 보장. 태그 이벤트가 중복 발화해도 래그돌을 다시 걸지 않는다.
 	bool bDeathPresented = false;
-
-	bool bWasPlayingLastFrame = false;
 };

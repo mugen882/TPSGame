@@ -14,6 +14,17 @@
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Character/EnemyCharacter.h"
 #include "Common/AIBlackboardKeys.h"
+#include "Network/LagCompensationComponent.h"
+#include "Common/TPSGameDefine.h"
+#include "GameFramework/PlayerState.h"
+
+namespace
+{
+	static TAutoConsoleVariable<int32> CVarLagCompensation(
+		TEXT("TPS.LagCompensation"), 1,
+		TEXT("0이면 랙 보상을 끈다. 전/후 비교 시연용."),
+		ECVF_Default);
+}
 
 /*
     Cue 실행용 예측 키 스코프.
@@ -403,8 +414,62 @@ void UGA_FireBase::FireAuthoritative(const FGameplayAbilityActorInfo* ActorInfo,
         return;   // 탄약과 쿨다운은 이미 소모됐다. 명중만 무효.
     }
 
+    /*
+        랙 보상.
+
+        사격자의 지연만큼 다른 캐릭터의 히트박스를 과거로 되감고 트레이스한다.
+        스코프를 벗어나면 반드시 원위치로 복원된다.
+
+        RewindSeconds가 0이면(AI, 로컬 호스트, 보상 비활성) 아무것도 하지 않으므로
+        기존 동작과 동일하다.
+    */
+    const float RewindSeconds = ComputeRewindSeconds(ActorInfo);
+    const bool  bMeasure = ULagCompensationComponent::IsDebugDrawEnabled();
+
     FHitResult Hit;
-    Weapon->FireAuthoritative(ValidatedAim, Char->GetController(), Hit);
+    AActor* RewoundHitActor = nullptr;
+
+    {
+        FTPSLagCompensationScope RewindScope(GetWorld(), /*Exclude=*/Char, RewindSeconds);
+
+        Weapon->FireAuthoritative(ValidatedAim, Char->GetController(), Hit);
+
+        // 되감은 상태에서의 판정 결과를 따로 떠둔다 (측정용, 데미지 없음)
+        if (bMeasure)
+        {
+            FHitResult Probe;
+            if (TraceProbe(Char, Weapon, ValidatedAim, Probe))
+            {
+                RewoundHitActor = Probe.GetActor();
+            }
+        }
+    }
+
+    /*
+        A/B 측정.
+
+        스코프를 벗어나 히트박스가 현재 위치로 복원된 뒤 같은 트레이스를 한 번 더 돌린다.
+        같은 발사에 대해 "되감은 판정"과 "되감지 않은 판정"을 나란히 얻으므로,
+        움직이는 적을 눈으로 쫓으며 비교할 필요 없이 로그 한 줄로 확인된다.
+        데미지를 적용하지 않는 순수 측정용이다.
+    */
+    if (bMeasure && RewindSeconds > 0.f)
+    {
+        FHitResult NowProbe;
+        AActor* NowHitActor = TraceProbe(Char, Weapon, ValidatedAim, NowProbe) ? NowProbe.GetActor() : nullptr;
+
+        const TCHAR* Verdict =
+            (RewoundHitActor && !NowHitActor) ? TEXT("★ 보상으로 명중") :
+            (!RewoundHitActor && NowHitActor) ? TEXT("보상으로 빗나감") :
+            (RewoundHitActor && NowHitActor && RewoundHitActor != NowHitActor) ? TEXT("대상 변경") :
+            TEXT("동일");
+
+        UE_LOG(TPSLog, Warning, TEXT("%s 되감기 %.0fms | 되감음=%s | 현재=%s | %s"),
+            *TPSNetDebug::TPSNetPrefix(Char), RewindSeconds * 1000.f,
+            RewoundHitActor ? *GetNameSafe(RewoundHitActor) : TEXT("none"),
+            NowHitActor ? *GetNameSafe(NowHitActor) : TEXT("none"),
+            Verdict);
+    }
 
     // 서버 권위 연출 — 예측 키를 실어 보내 소유 클라의 중복 재생을 막는다.
     UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
@@ -470,6 +535,48 @@ void UGA_FireBase::PredictFireCues(const FGameplayAbilityActorInfo* ActorInfo, c
     {
         Char->ExecuteImpactCue(Hit.ImpactPoint, Hit.ImpactNormal);
     }
+}
+
+bool UGA_FireBase::TraceProbe(ACommonCharacter* Char, AWeaponBase* Weapon, const FVector& AimPoint, FHitResult& OutHit) const
+{   
+    if (!Char || !Weapon || !GetWorld()) return false;
+
+    const FVector Start = Weapon->GetMuzzleLocation();
+    const FVector Dir = (AimPoint - Start).GetSafeNormal();
+    const FVector End = Start + Dir * Weapon->GetFireRange();
+
+    FCollisionQueryParams Params;
+    Params.AddIgnoredActor(Weapon);
+    Params.AddIgnoredActor(Char);
+
+    // 데미지 없는 측정 전용 트레이스. 무기의 판정 트레이스와 같은 조건으로 돌린다.
+    return GetWorld()->LineTraceSingleByChannel(OutHit, Start, End, ECC_Weapon, Params);
+}
+
+float UGA_FireBase::ComputeRewindSeconds(const FGameplayAbilityActorInfo* ActorInfo) const
+{
+    if (CVarLagCompensation.GetValueOnGameThread() == 0)
+    {
+        return 0.f;   // 시연용 토글
+    }
+
+    if (!ActorInfo) return 0.f;
+
+    /*
+        서버가 직접 조종하는 폰은 지연이 없다.
+        AI(AIController가 서버에 있음)와 리슨 서버 호스트가 해당한다.
+        데디케이티드 서버의 플레이어는 전부 원격이므로 되감기 대상이다.
+    */
+    if (ActorInfo->IsLocallyControlled()) return 0.f;
+
+    const APlayerController* PC = Cast<APlayerController>(ActorInfo->PlayerController.Get());
+    if (!PC || !PC->PlayerState) return 0.f;
+
+    // GetPingInMilliseconds는 왕복 시간(RTT)을 ms로 준다.
+    const float RttSeconds = PC->PlayerState->GetPingInMilliseconds() / 1000.f;
+
+    const float Rewind = RttSeconds + InterpolationDelay;
+    return FMath::Clamp(Rewind, 0.f, MaxRewindSeconds);
 }
 
 ACommonCharacter* UGA_FireBase::GetOwningCharacter(const FGameplayAbilityActorInfo* ActorInfo) const

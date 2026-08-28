@@ -105,6 +105,28 @@ private:
     */
     bool ValidateAimPoint(ACommonCharacter* Char, AWeaponBase* Weapon, FVector& InOutAimPoint) const;
 
+    /*
+        사격자의 지연만큼 되감을 시간을 계산한다.
+
+        클라가 화면에서 본 적의 위치는 서버의 현재 위치가 아니다.
+          서버 -> 클라 위치 복제 지연 (RTT/2)
+        + 클라의 이동 보간 지연
+        + 클라 -> 서버 조준점 전송 지연 (RTT/2)
+        = RTT + 보간 지연
+
+        AI는 서버에서 조준하므로 지연이 없다. 0을 반환한다.
+    */
+    float ComputeRewindSeconds(const FGameplayAbilityActorInfo* ActorInfo) const;
+
+    /*
+        측정 전용 트레이스. 데미지를 적용하지 않는다.
+
+        되감은 상태와 복원된 상태에서 각각 돌려 "이 발사에 랙 보상이
+        실제로 영향을 줬는가"를 로그 한 줄로 판정하는 데 쓴다.
+        TPS.LagCompensation.Debug 가 켜졌을 때만 호출된다.
+    */
+    bool TraceProbe(ACommonCharacter* Char, AWeaponBase* Weapon, const FVector& AimPoint, FHitResult& OutHit) const;
+
     // 서버 권위 발사 (트레이스 + 데미지 + 연출 Cue)
     void FireAuthoritative(const FGameplayAbilityActorInfo* ActorInfo, const FVector& AimPoint);
 
@@ -136,6 +158,24 @@ protected:
     // TPS 카메라는 캐릭터 측후방을 조준할 수 있으므로 느슨하게 둔다.
     UPROPERTY(EditDefaultsOnly, Category = "Validation")
     float AimMinForwardDot = -0.5f;
+
+    /*
+        되감기 상한.
+
+        핑을 그대로 믿으면 조작된 클라이언트가 "1초 전에 있던 위치"를 쏘는 치트가 된다.
+        정상 플레이의 지연 범위를 넘지 않도록 잘라낸다.
+    */
+    UPROPERTY(EditDefaultsOnly, Category = "LagCompensation")
+    float MaxRewindSeconds = 0.3f;
+
+    /*
+        클라이언트의 이동 보간 지연 추정치.
+
+        CharacterMovementComponent의 NetworkSmoothing이 만드는 지연으로,
+        핑에 포함되지 않는다. 정확히 알기 어려워 상수로 둔다.
+    */
+    UPROPERTY(EditDefaultsOnly, Category = "LagCompensation")
+    float InterpolationDelay = 0.05f;
 
     // 클라 조준점이 도착하지 않을 때 어빌리티가 영구히 매달리는 것을 막는다.
     UPROPERTY(EditDefaultsOnly, Category = "Validation")
