@@ -4,9 +4,9 @@
 #include "Blueprint/UserWidget.h"
 #include "AbilitySystemComponent.h"
 #include "Net/UnrealNetwork.h"
-#include "GameplayEffectTypes.h"
 #include "AbilitySystem/TPSAttributeSet.h"
 #include "Common/TPSGameplayTags.h"
+#include "GameplayEffectTypes.h"
 #include "GameplayEffect.h"
 #include "Weapon/WeaponBase.h"
 #include "UI/HealthBarWidget.h"
@@ -71,6 +71,17 @@ void ACommonCharacter::InitAbilityActorInfoAndBind(const TCHAR* CallSite)
         AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetRocketAmmoAttribute())
             .AddUObject(this, &ACommonCharacter::HandleAmmoChanged);
 
+        /*
+            State.Dead 태그 구독.
+
+            사망 연출의 트리거를 "체력 0 관측"에서 "태그 변화"로 옮겼다.
+            서버가 GE_Dead를 적용하면 태그가 전원에게 복제되고, 각 머신이
+            여기서 로컬 연출을 수행한다. 늦게 접속한 클라이언트도 초기 복제로
+            태그를 받으므로 이미 죽은 캐릭터가 산 것처럼 보이지 않는다.
+        */
+        AbilitySystemComponent->RegisterGameplayTagEvent(TAG_State_Dead, EGameplayTagEventType::NewOrRemoved)
+            .AddUObject(this, &ACommonCharacter::OnDeadTagChanged);
+
         bAttributeDelegatesBound = true;
 
         UE_LOG(TPSLog, Verbose, TEXT("%s InitAbilityActorInfo (from %s) — delegates BOUND, Health=%.1f/%.1f"),
@@ -111,9 +122,9 @@ void ACommonCharacter::BeginPlay()
     // 이게 없으면 시뮬레이티드 프록시 적의 체력바가 갱신되지 않는다.
     InitAbilityActorInfoAndBind(TEXT("BeginPlay"));
 
-    // TODO(M1): 무기 액터를 리플리케이트로 전환하면서 HasAuthority() 게이트를 건다.
-    //           지금 게이트를 걸면 클라에 무기 메시가 아예 없는 중간 상태가 되므로
-    //           무기 슬롯 배열 + OnRep_CurrentWeapon 작업과 함께 옮긴다.
+    // 무기 액터를 리플리케이트로 전환하면서 HasAuthority() 게이트를 건다.
+    // 지금 게이트를 걸면 클라에 무기 메시가 아예 없는 중간 상태가 되므로
+    // 무기 슬롯 배열 + OnRep_CurrentWeapon 작업과 함께 옮긴다.
     SpawnWeapons();
 }
 
@@ -130,26 +141,54 @@ bool ACommonCharacter::TargetIsDead(AActor* Actor)
     return false;
 }
 
-void ACommonCharacter::HandleDeath()
+void ACommonCharacter::ServerHandleDeathAuthority()
 {
-    if (AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(TAG_State_Dead))
+    if (!HasAuthority() || !AbilitySystemComponent) return;
+    if (IsDead()) return;                       // 이미 사망 처리됨
+    if (!DeadEffectClass) 
     {
+        UE_LOG(TPSLog, Error, TEXT("%s DeadEffectClass 미지정 — 사망 태그가 복제되지 않는다"),
+            *TPSNetDebug::TPSNetPrefix(this));
         return;
     }
 
     /*
-        TODO(M3): AddLooseGameplayTag는 리플리케이트되지 않는다.
+        Infinite GE로 State.Dead를 부여한다.
 
-        지금은 각 머신에서 Health가 0으로 복제되는 순간 HandleHealthChanged가
-        로컬로 HandleDeath를 호출하므로 결과적으로 태그가 각자 붙는다.
-        하지만 늦게 접속한 클라이언트나 부활/힐 경로에서는 상태가 어긋난다.
-        Dead 태그를 부여하는 GE를 서버에서 적용하는 방식으로 교체할 것.
+        Loose 태그와 달리 GE가 부여한 태그는 ReplicationMode가 Mixed든 Minimal이든
+        모든 클라이언트로 복제된다. 늦게 접속한 클라이언트도 초기 복제 시점에 받는다.
     */
-    if (AbilitySystemComponent)
+    FGameplayEffectContextHandle Context = AbilitySystemComponent->MakeEffectContext();
+    Context.AddSourceObject(this);
+
+    FGameplayEffectSpecHandle Spec =
+        AbilitySystemComponent->MakeOutgoingSpec(DeadEffectClass, 1.0f, Context);
+    if (Spec.IsValid())
     {
-        AbilitySystemComponent->AddLooseGameplayTag(TAG_State_Dead);
-        AbilitySystemComponent->CancelAllAbilities();
+        AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*Spec.Data);
     }
+
+    AbilitySystemComponent->CancelAllAbilities();
+
+    UE_LOG(TPSLog, Verbose, TEXT("%s 사망 처리 (GE_Dead 적용)"), *TPSNetDebug::TPSNetPrefix(this));
+}
+
+void ACommonCharacter::OnDeadTagChanged(const FGameplayTag /*Tag*/, int32 NewCount)
+{
+    // 태그가 붙는 순간에만 반응한다. 제거(부활)는 폰 교체로 처리하므로 여기서 다루지 않는다.
+    if (NewCount > 0)
+    {
+        HandleDeath();
+    }
+}
+
+void ACommonCharacter::HandleDeath()
+{
+    if (bDeathPresented)
+    {
+        return;   // 태그 이벤트가 중복 발화해도 연출은 한 번만
+    }
+    bDeathPresented = true;
 
     GetCharacterMovement()->DisableMovement();
 
@@ -299,10 +338,14 @@ void ACommonCharacter::HandleHealthChanged(const FOnAttributeChangeData& Data)
     {
         if (AttributeSet->GetHealth() <= 0.0f)
         {
-            if (!IsDead())   // 아직 사망 태그 없을 때
-            {
-                HandleDeath();
-            }
+            /*
+                사망 판정은 서버만 한다.
+
+                이전에는 각 머신이 여기서 HandleDeath를 직접 불러 로컬 태그를 붙였다.
+                이제 서버가 GE_Dead를 적용하고, 연출은 태그 복제를 받은
+                OnDeadTagChanged가 각 머신에서 수행한다.
+            */
+            ServerHandleDeathAuthority();
         }
         else
         {

@@ -14,7 +14,7 @@ class UGameplayEffect;
 */
 
 /*
-	[M2b-3] 예측 탄착을 하지 않는다.
+	예측 탄착을 하지 않는다.
 
 	FireInternal이 VRandCone 난수 퍼짐을 적용하므로 클라가 아무리 정확히
 	트레이스해도 서버와 다른 지점을 맞춘다. 예측을 포기하고 서버 탄착

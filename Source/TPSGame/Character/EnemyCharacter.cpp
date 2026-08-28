@@ -85,7 +85,7 @@ void AEnemyCharacter::PossessedBy(AController* NewController)
 
     if (UTPSAttributeSet* AttrSet = GetAttributeSet())
     {
-        AttrSet->InitializeAttributes(GetBaseHealth() * HealthMul);
+        AttrSet->InitializeAttributes(GetEnemyBaseHP() * HealthMul);
     }
 }
 
@@ -214,6 +214,17 @@ void AEnemyCharacter::HandleDeath()
     }
 
     HealthBarComponent->SetVisibility(false);
+
+    /*
+        시체 정리는 서버에서만 예약한다.
+
+        Destroy()는 복제되므로 클라이언트 사본도 함께 정리된다.
+        클라에서 호출하면 자기만 먼저 사라져 서버와 어긋난다.
+    */
+    if (HasAuthority())
+    {
+        SetLifeSpan(CorpseLifeSpan);
+    }
 }
 
 FVector AEnemyCharacter::GetAimPoint() const

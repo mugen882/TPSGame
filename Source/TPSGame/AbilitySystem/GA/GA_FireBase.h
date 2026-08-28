@@ -146,8 +146,4 @@ private:
 
     FDelegateHandle TargetDataDelegateHandle;
     FTimerHandle    ClientAimTimeoutTimer;
-
-    // GA_FireBase.h — private
-    // 진단용 — M2b-3 이후 제거
-    float MontageStartTime = 0.f;
 };

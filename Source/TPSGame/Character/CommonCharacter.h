@@ -149,11 +149,32 @@ protected:
 	*/
 	void InitAbilityActorInfoAndBind(const TCHAR* CallSite);
 
+	/*
+		State.Dead 태그 변화 구독.
+
+		이전에는 각 머신이 체력 0을 관측해 로컬로 AddLooseGameplayTag를 했다.
+		Loose 태그는 복제되지 않아 늦게 접속한 클라이언트나 부활 경로에서 어긋났다.
+		이제 서버가 GE_Dead(Infinite, GrantedTags: State.Dead)를 적용하고
+		각 머신은 태그 변화에만 반응한다.
+	*/
+	UFUNCTION()
+	void OnDeadTagChanged(const FGameplayTag Tag, int32 NewCount);
+
+	// 서버 전용. 사망 판정과 GE_Dead 적용.
+	void ServerHandleDeathAuthority();
+
 	// 서버 전용. DefaultAbilities 부여
 	void GrantDefaultAbilities();
 
 	bool TargetIsDead(AActor* Actor);
 
+	/*
+		사망 연출. 태그 변화에 반응해 각 머신에서 로컬로 실행된다.
+
+		서버가 GE_Dead를 적용하면 State.Dead 태그가 전원에게 복제되고,
+		각 머신의 태그 이벤트가 이 함수를 부른다.
+		늦게 접속한 클라이언트도 초기 복제 시점에 태그를 받아 래그돌이 적용된다.
+	*/
 	virtual void HandleDeath();
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -219,10 +240,17 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "GAS")
 	TArray<TSubclassOf<class UGameplayAbility>> DefaultAbilities;
 
+	// State.Dead 태그를 부여하는 Infinite GE. 서버에서만 적용한다.
+	UPROPERTY(EditDefaultsOnly, Category = "GAS")
+	TSubclassOf<class UGameplayEffect> DeadEffectClass;
+
 	bool bAbilitiesGranted = false;
 
 	// 델리게이트 중복 바인딩 방지
 	bool bAttributeDelegatesBound = false;
+
+	// 사망 연출 1회 보장. 태그 이벤트가 중복 발화해도 래그돌을 다시 걸지 않는다.
+	bool bDeathPresented = false;
 
 	bool bWasPlayingLastFrame = false;
 };

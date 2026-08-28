@@ -17,6 +17,8 @@ class TPSGAME_API ATPSPlayerController : public APlayerController
 	GENERATED_BODY()
 
 public:
+	ATPSPlayerController();
+
 	UTPSHUDWidget* GetHUDWidget() const { return HUDWidget; }
 
 public:
@@ -26,8 +28,26 @@ public:
     UFUNCTION(BlueprintCallable, Category="UI")
     void ConfirmQuit();
 
+public:
+	/*
+		치트 진입점. UTPSCheatManager가 호출한다.
+
+		콘솔 명령은 입력한 머신에서 실행되므로, 원격 클라이언트의 치트가
+		게임 상태를 바꾸려면 이 RPC를 반드시 거쳐야 한다.
+	*/
+	UFUNCTION(Server, Reliable)
+	void ServerCheatSuicide();
+
+	UFUNCTION(Server, Reliable)
+	void ServerCheatDamageSelf(float Amount);
+
+	UFUNCTION(Server, Reliable)
+	void ServerCheatHealSelf();
+
 protected:
     virtual void SetupInputComponent() override;
+
+	virtual void BeginPlay() override;
 
     UPROPERTY(EditDefaultsOnly, Category="UI")
     TSubclassOf<UTPSQuitConfirmWidget> QuitConfirmWidgetClass;
@@ -48,6 +68,9 @@ private:
 
 	// 서버/클라 공용 HUD 셋업
 	void SetupHUDFor(APawn* InPawn);
+
+	// 치트 대상 폰을 얻는다. 서버 전용. 유효하지 않거나 이미 죽었으면 nullptr.
+	class ACommonCharacter* GetCheatTargetChecked(const TCHAR* CheatName);
 
 private:
 	UPROPERTY()

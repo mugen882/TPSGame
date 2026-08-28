@@ -40,6 +40,10 @@ public:
 
 	void HandleDeath() override;
 
+	// 사망 후 시체가 남아 있는 시간 (서버에서만 적용)
+	UPROPERTY(EditDefaultsOnly, Category = "Enemy")
+	float CorpseLifeSpan = 5.0f;
+
 	void FireOnce(AActor* Target);
 
 	void SetAiming(bool bNew) { bIsAiming = bNew; }
@@ -69,13 +73,16 @@ public:
 
 	virtual FVector GetAimPoint() const override;
 
-	float GetBaseHealth() { return BaseHealth; }
+	float GetEnemyBaseHP() { return EnemyBaseHP; }
 
 	virtual void OnReloadFinished() override;
 
 protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Combat")
 	bool bIsAiming = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Enemy")
+	float EnemyBaseHP = ENEMY_BASE_HP;   // 기본 체력 (난이도 배수 적용 전)
 
 private:
 	void PlayHitFlash();
@@ -113,6 +120,4 @@ private:
 
 	float RecentDamageAccum = 0.f;   // 최근 누적 피해
 	float DamageDecayTime = 4.f;   // 최근 피해 누적 리셋 시간
-
-	const float BaseHealth = ENEMY_BASE_HP;   // 기본 체력 (난이도 배수 적용 전)
 };

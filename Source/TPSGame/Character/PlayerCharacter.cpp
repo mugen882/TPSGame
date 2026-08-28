@@ -6,6 +6,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Kismet/GameplayStatics.h"
+#include "TPSGameGameMode.h"
 #include "Components/CapsuleComponent.h"
 #include "Weapon/WeaponBase.h"
 #include "Common/TPSGameTypes.h"
@@ -77,15 +78,10 @@ void APlayerCharacter::Tick(float DeltaTime)
         AimComponent->UpdateCameraInterpolation(DeltaTime);
 
     /*
-        [M2b-3] 연사는 입력 홀드 반복으로 구현한다.
+        연사는 입력 홀드 반복으로 구현한다.
 
-        어빌리티 내부 타이머로 돌리면 모든 발사가 단일 예측 키를 공유해
-        Cost / 쿨다운 / 조준점이 발당으로 짝지어지지 않는다.
         매 틱 활성화를 시도하되 쿨다운 GE가 발사 간격을 강제하므로
         간격보다 빨리 나가지 않는다.
-
-        쿨다운 중의 시도는 CanActivateAbility에서 태그 검사만으로 걸러지고
-        서버로 RPC가 나가지 않으므로 비용이 거의 없다.
     */
     if (bFireInputHeld && IsLocallyControlled())
     {
@@ -163,36 +159,29 @@ void APlayerCharacter::OnDamaged(float InDamage)
 
 void APlayerCharacter::HandleDeath()
 {
-    Super::HandleDeath();   // 공통 래그돌 + State.Dead 태그
+    Super::HandleDeath();   // 공통 래그돌
 
-    // 입력 차단.
-    // 시뮬레이티드 프록시(남의 캐릭터)에서는 GetController()가 null이므로 자연히 건너뛴다.
+    // 입력 차단. 시뮬레이티드 프록시에서는 GetController()가 null이므로 자연히 건너뛴다.
     if (APlayerController* PC = Cast<APlayerController>(GetController()))
     {
         DisableInput(PC);
     }
 
     /*
-        레벨 재시작은 서버에서만.
+        리스폰은 서버의 GameMode가 관장한다.
 
-        HandleDeath는 이제 어트리뷰트 복제를 타고 모든 머신에서 호출되므로,
-        게이트가 없으면 클라이언트가 자기 혼자 OpenLevel을 호출해 세션에서 튕긴다.
-
-        TODO(M3): 웨이브 디펜스 코옵에서는 레벨 재시작이 아니라
-                  GameMode 주도 리스폰(RestartPlayer)으로 교체한다.
-                  전원 사망 시에만 게임오버 처리.
+        이전에는 OpenLevel로 레벨을 통째로 리로드했다. 코옵에서 한 명이 죽었다고
+        전원이 맵을 다시 로드하면 안 되므로 RestartPlayer 기반으로 교체했다.
     */
     if (!HasAuthority())
     {
         return;
     }
 
-    // 3초 후 레벨 재시작
-    FTimerHandle RestartTimer;
-    GetWorldTimerManager().SetTimer(RestartTimer, [this]()
-        {
-            UGameplayStatics::OpenLevel(this, FName(*GetWorld()->GetName()));
-        }, 3.0f, false);
+    if (ATPSGameGameMode* GM = GetWorld()->GetAuthGameMode<ATPSGameGameMode>())
+    {
+        GM->NotifyPlayerDied(this);
+    }
 }
 
 void APlayerCharacter::StartAim()

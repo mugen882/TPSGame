@@ -31,6 +31,21 @@ void UWeaponManagerComponent::GetLifetimeReplicatedProps(TArray<FLifetimePropert
     DOREPLIFETIME_CONDITION_NOTIFY(UWeaponManagerComponent, CurrentWeaponType, COND_None, REPNOTIFY_Always);
 }
 
+void UWeaponManagerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    for (const TPair<EWeaponType, AWeaponBase*>& Pair : Weapons)
+    {
+        if (Pair.Value)
+        {
+            Pair.Value->Destroy();
+        }
+    }
+    Weapons.Empty();
+    CurrentWeapon = nullptr;
+
+    Super::EndPlay(EndPlayReason);
+}
+
 void UWeaponManagerComponent::SpawnWeapons()
 {
     ACharacter* OwnerChar = Cast<ACharacter>(GetOwner());

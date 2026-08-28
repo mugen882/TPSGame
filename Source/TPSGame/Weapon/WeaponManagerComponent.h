@@ -51,7 +51,7 @@ protected:
     /*
         CurrentWeapon / Weapons 는 복제하지 않는다.
 
-        탄약이 어트리뷰트로 이관되면(M2a) 무기 액터가 들고 있는 값은
+        탄약이 어트리뷰트로 이관되면 무기 액터가 들고 있는 값은
         전부 BP CDO에서 오는 설정값뿐이라 모든 머신이 이미 동일하게 가지고 있다.
         따라서 무기 액터를 복제할 이유가 없고, 각 머신이 로컬로 스폰한 뒤
         '어떤 종류를 들고 있는가'만 1바이트로 복제하면 충분하다.
@@ -68,6 +68,18 @@ protected:
     void OnRep_CurrentWeaponType();
 
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+    /*
+        소유 캐릭터가 파괴될 때 무기 액터를 함께 정리한다.
+
+        무기는 복제하지 않고 각 머신이 로컬로 스폰한다. 그래서 캐릭터가
+        파괴돼도 자동으로 따라 사라지지 않는다. 어태치만 풀리고 월드에 남아
+        리스폰이 반복될수록 바닥에 총이 쌓인다.
+
+        복제 액터였다면 소유자 파괴와 함께 정리됐을 일을, 로컬 스폰을 선택한
+        대가로 직접 처리하는 것이다.
+    */
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
     ACommonCharacter* GetOwnerCharacter() const;

@@ -115,15 +115,14 @@ bool UGA_FireBase::PlayFireMontage(const FGameplayAbilityActorInfo* ActorInfo, b
         Task->OnCompleted.AddDynamic(this, &UGA_FireBase::OnFireMontageEnded);
         Task->OnInterrupted.AddDynamic(this, &UGA_FireBase::OnFireMontageEnded);
         Task->OnCancelled.AddDynamic(this, &UGA_FireBase::OnFireMontageCancelled);
-        MontageStartTime = GetWorld()->GetTimeSeconds();
         Task->ReadyForActivation();
     }
     else
     {
         // 플레이어: 어빌리티가 곧바로 끝나므로 몽타주는 연출용으로 재생한다.
         // (PlayMontageAndWait를 쓰면 EndAbility가 몽타주를 즉시 취소해버린다)
-        // TODO(M2b-2): 이 재생은 로컬 전용이라 다른 플레이어에게 보이지 않는다.
-        //              GameplayCue로 이관할 것.
+        // 이 재생은 로컬 전용이라 다른 플레이어에게 보이지 않는다.
+        // GameplayCue로 이관할 것.
         if (USkeletalMeshComponent* Mesh = Character->GetMesh())
         {
             if (UAnimInstance* Anim = Mesh->GetAnimInstance())
@@ -142,9 +141,6 @@ void UGA_FireBase::OnFireMontageEnded()
 
 void UGA_FireBase::OnFireMontageCancelled()
 {
-    UE_LOG(TPSLog, Warning, TEXT("%s FireMontage 취소됨 (경과 %.3f초)"),
-        *TPSNetDebug::TPSNetPrefix(GetAvatarActorFromActorInfo()),
-        GetWorld()->GetTimeSeconds() - MontageStartTime);
     OnFireMontageEnded();
 }
 
