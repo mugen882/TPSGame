@@ -29,6 +29,11 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAmmoChanged, int32, NewCurrentAm
 	PlayerState가 없기 때문에, ASC를 PlayerState로 올리면 플레이어/적 경로가 갈라진다.
 	웨이브 디펜스 코옵에서는 리스폰 시 어트리뷰트를 다시 초기화하면 되므로
 	PlayerState 이관의 이점이 크지 않다고 판단.
+
+	데디케이티드 서버에서 애님 노티파이가 발생하지 않아 적이 사격하지 못할 것을
+	우려해 VisibilityBasedAnimTickOption을 명시한 적이 있으나, 패키징 서버 실측
+	결과 엔진 기본값(AlwaysTickPoseAndRefreshBones)이 이미 이를 보장하고 있었다.
+	누군가 이 값을 OnlyTickPoseWhenRendered 등으로 바꾸면 그때 다시 문제가 된다.
 */
 
 UCLASS()

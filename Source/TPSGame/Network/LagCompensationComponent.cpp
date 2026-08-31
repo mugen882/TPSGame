@@ -205,8 +205,8 @@ FTPSLagCompensationScope::FTPSLagCompensationScope(UWorld* World, ACommonCharact
 		사격자 본인은 클라이언트가 예측으로 조종하므로 서버와 이미 동기화되어 있고,
 		되감으면 오히려 자기 총구 위치가 과거로 가서 트레이스 시작점이 틀어진다.
 
-		TODO(M5): 총구~조준점 구간 근처만 되감도록 좁히면 캐릭터가 많을 때 비용이 준다.
-		          지금은 캡슐 이동 두 번이라 전수로 돌려도 부담이 없다.
+		최적화 여지: 총구~조준점 구간 근처만 되감도록 좁히면 캐릭터가 많을 때 비용이 준다.
+		             지금은 캡슐 이동 두 번이라 전수로 돌려도 부담이 없다.
 	*/
 	for (TActorIterator<ACommonCharacter> It(World); It; ++It)
 	{

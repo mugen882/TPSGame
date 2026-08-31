@@ -132,8 +132,14 @@ bool UGA_FireBase::PlayFireMontage(const FGameplayAbilityActorInfo* ActorInfo, b
     {
         // 플레이어: 어빌리티가 곧바로 끝나므로 몽타주는 연출용으로 재생한다.
         // (PlayMontageAndWait를 쓰면 EndAbility가 몽타주를 즉시 취소해버린다)
-        // 이 재생은 로컬 전용이라 다른 플레이어에게 보이지 않는다.
-        // GameplayCue로 이관할 것.
+        /*
+            이 재생은 로컬 전용이라 다른 플레이어에게 보이지 않는다.
+
+            머즐/탄착과 달리 GameplayCue로 옮기지 않았다. 발사 몽타주는 상체
+            애니메이션이라 다른 플레이어 화면에서는 조준 포즈에 가려 거의 드러나지
+            않는 반면, Cue로 옮기면 발당 멀티캐스트가 하나 더 늘어난다.
+            연사 무기에서 특히 비용 대비 효과가 낮다고 판단했다.
+        */
         if (USkeletalMeshComponent* Mesh = Character->GetMesh())
         {
             if (UAnimInstance* Anim = Mesh->GetAnimInstance())

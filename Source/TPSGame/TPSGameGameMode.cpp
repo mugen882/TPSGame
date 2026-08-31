@@ -25,7 +25,7 @@ ATPSGameGameMode::ATPSGameGameMode()
 	bUseSeamlessTravel = true;
 
 	// 모든 플레이어가 들어올 때까지 기다리지 않고 바로 시작.
-	// 웨이브 시작 대기가 필요해지는 M5에서 다시 검토한다.
+	// 웨이브 시스템을 넣을 때 다시 검토한다 (전원 입장 후 시작이 필요해진다).
 	bDelayedStart = false;
 }
 

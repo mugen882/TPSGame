@@ -77,7 +77,8 @@ protected:
         리스폰이 반복될수록 바닥에 총이 쌓인다.
 
         복제 액터였다면 소유자 파괴와 함께 정리됐을 일을, 로컬 스폰을 선택한
-        대가로 직접 처리하는 것이다.
+        대가로 직접 처리하는 것이다. 이 비용은 무기 복제를 포기하기로 한 시점이
+        아니라 리스폰이 생긴 뒤에야 드러났다.
     */
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 

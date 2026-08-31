@@ -48,6 +48,19 @@ void AEnemyCharacter::BeginPlay()
 
     Super::BeginPlay();
 
+    /*
+        데디케이티드 서버는 체력바를 그리지 않는다.
+    */
+    if (GetNetMode() == NM_DedicatedServer)
+    {
+        if (HealthBarComponent)
+        {
+            HealthBarComponent->SetVisibility(false);
+            HealthBarComponent->SetComponentTickEnabled(false);
+        }
+        return;
+    }
+
     if (HealthBarComponent)
     {
         if (HealthBarWidgetClass)
