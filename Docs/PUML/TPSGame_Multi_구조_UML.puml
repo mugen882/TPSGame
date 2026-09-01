@@ -1,0 +1,295 @@
+@startuml TPSGame_Core
+title TPSGame 구조 (코옵 멀티플레이)
+
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam class {
+    BackgroundColor #FDFDFD
+    BorderColor #555555
+    ArrowColor #555555
+}
+
+legend top right
+  <<서버>>  서버에서만 실행
+  <<복제>>  프로퍼티가 클라이언트로 복제됨
+  <<예측>>  클라이언트가 먼저 실행하고 서버가 확정
+endlegend
+
+' =================================================================
+' Game : 매치 상태 (서버 권위)
+' =================================================================
+package "Game" #F0F0FF {
+    class ATPSGameGameMode <<서버>> {
+        +NotifyPlayerDied() / NotifyEnemyDied()
+        +RequestRestartMatch()
+        -EndMatchWithResult(bVictory)
+        -RefreshEnemyCount() / StopAllEnemyAI()
+        -TotalLives / RespawnDelay
+    }
+    class ATPSGameState <<복제>> {
+        -RemainingLives <<COND_None>>
+        -RemainingEnemies <<COND_None>>
+        +OnLivesChanged / OnEnemiesChanged
+    }
+}
+
+note bottom of ATPSGameState
+  GameMode는 서버에만 존재한다.
+  클라이언트가 매치 상태를 아는 유일한 통로가 GameState다.
+end note
+
+ATPSGameGameMode --> ATPSGameState : 상태 갱신
+
+' =================================================================
+' Subsystem
+' =================================================================
+package "Subsystem" #cfb183 {
+    class UDifficultySubsystem {
+        +SetDifficulty() / GetDifficulty()
+        ..
+        GameInstance 기반이라 머신별로 독립.
+        읽는 곳이 전부 서버 경로라 현재는 무해.
+    }
+}
+
+' =================================================================
+' Character : 발사 요청 + 데미지 수신 + Cue 처리
+' =================================================================
+package "Character" #F4F8FF {
+    abstract class ACommonCharacter {
+        +GetAbilitySystemComponent()
+        +GetAimPoint() : FVector
+        +GetCurrentWeaponAmmo() / HasCurrentWeaponAmmo()
+        --
+        <b>초기화 3경로</b>
+        #PossessedBy() <<서버>>
+        #OnRep_PlayerState() <<클라>>
+        #BeginPlay() <<AI 프록시>>
+        #InitAbilityActorInfoAndBind()
+        --
+        <b>사망</b>
+        +ServerHandleDeathAuthority() <<서버>>
+        #OnDeadTagChanged() : 태그 구독
+        #HandleDeath() <<virtual>> : 로컬 연출
+        --
+        <b>GameplayCue (IGameplayCueInterface)</b>
+        +ExecuteFireCue() / ExecuteImpactCue()
+        +GameplayCue_Weapon_Fire()
+        +GameplayCue_Weapon_Impact()
+        --
+        +Client_NotifyHitConfirmed() <<Client RPC>>
+        -LastDamageInstigator <<복제, OwnerOnly>>
+        -ASC / AttributeSet / LagCompensation
+    }
+    class APlayerCharacter {
+        +TryFire() / TryActivateSwapAbility()
+        +Tick() : 입력 홀드 반복 (연사)
+        -입력→발사/조준/스왑
+    }
+    class AEnemyCharacter {
+        +SetFireTarget() / OnFireNotify()
+        +StopCombat() : BT + 어빌리티 정지
+        -CorpseLifeSpan
+    }
+    class UPlayerAimComponent {
+        +IsAiming() / ComputeAimPoint()
+        ..
+        카메라 기반이라 서버에서 의미 없음
+    }
+    class ATPSPlayerController {
+        +Client_ShowGameOver(bVictory)
+        +Client_HideGameOver()
+        +Server_RequestRestart()
+        #OnPossess() <<서버>>
+        #AcknowledgePossession() <<클라>>
+    }
+}
+
+ACommonCharacter <|-- APlayerCharacter
+ACommonCharacter <|-- AEnemyCharacter
+AEnemyCharacter ..> UDifficultySubsystem
+APlayerCharacter *-- UPlayerAimComponent
+ATPSGameGameMode --> ATPSPlayerController : Client RPC
+ATPSGameGameMode --> AEnemyCharacter : StopCombat
+
+' =================================================================
+' Network : 랙 보상 + 조준점 전달
+' =================================================================
+package "Network" #F0FFFF {
+    class ULagCompensationComponent <<서버>> {
+        +RewindTo(ServerTime) / Restore()
+        -History : 캡슐 스냅샷 링버퍼 (60Hz, 1초)
+        -SampleAt() : 두 스냅샷 사이 보간
+    }
+    class FTPSLagCompensationScope <<RAII>> {
+        생성자: 사격자 제외 전원 되감기
+        소멸자: 반드시 복원
+    }
+    class FTPSTargetData_AimPoint <<USTRUCT>> {
+        +AimPoint : FVector_NetQuantize100
+        ..
+        클라가 "조준점"만 보낸다.
+        "히트 결과"를 보내면 검증이 불가능해진다.
+    }
+}
+
+ACommonCharacter *-- ULagCompensationComponent
+FTPSLagCompensationScope ..> ULagCompensationComponent : 되감기 지시
+
+' =================================================================
+' GAS : 어빌리티 + 어트리뷰트
+' =================================================================
+package "GAS" #F4FFF6 {
+    class UTPSAttributeSet <<복제>> {
+        +Health / MaxHealth <<COND_None>>
+        +RifleAmmo / MachineGunAmmo / RocketAmmo <<COND_OwnerOnly>>
+        +Damage <<복제 안 함 — 메타>>
+        +PostGameplayEffectExecute() : Health 차감
+        ..
+        전부 REPNOTIFY_Always
+    }
+    abstract class UGA_FireBase <<예측>> {
+        NetExecutionPolicy = LocalPredicted
+        --
+        #FireOnce() : 머신별 분기
+        #PredictFireCues() <<클라>>
+        #FireAuthoritative() <<서버>>
+        #SendAimPointToServer() <<클라>>
+        #BeginWaitForClientAim() <<서버>>
+        #ValidateAimPoint() <<서버 검증>>
+        #ComputeRewindSeconds() : RTT + 보간지연
+        #CheckCost() / ApplyCost() : 무한탄약 예외
+        #ApplyCooldown() : FireInterval SetByCaller
+    }
+    class UGA_FireRifle
+    class UGA_FireRocketLauncher
+    class UGA_FireMachineGun {
+        생성자만 남음 (39줄)
+        발사 1회 = 어빌리티 활성화 1회
+    }
+    class UGA_Reload <<예측>> {
+        LocalPredicted
+        몽타주는 예측, 탄약 충전은 서버
+    }
+    class UGA_SwapWeapon <<예측>> {
+        LocalPredicted
+        ActivationOwnedTags = State.Swapping
+        BP 자식마다 TargetWeaponType
+    }
+}
+
+UGA_FireBase <|-- UGA_FireRifle
+UGA_FireBase <|-- UGA_FireRocketLauncher
+UGA_FireBase <|-- UGA_FireMachineGun
+
+ACommonCharacter *-- UTPSAttributeSet
+UGA_FireBase ..> FTPSTargetData_AimPoint : 조준점 전송
+UGA_FireBase ..> FTPSLagCompensationScope : 판정 전 되감기
+
+' =================================================================
+' Weapon : 판정만 담당 (연출은 Cue, 탄약은 어트리뷰트)
+' =================================================================
+package "Weapon" #FFF8F4 {
+    class UWeaponManagerComponent {
+        +ApplyWeaponType() / SpawnWeapons()
+        +EndPlay() : 무기 액터 정리
+        -CurrentWeaponType <<복제, 1바이트>>
+        -Weapons[] : 로컬 전용 (복제 안 함)
+    }
+    abstract class AWeaponBase {
+        +FireAuthoritative(Aim, Ctrl, OutHit) <<서버>>
+        +TracePredictedImpact(Aim, OutHit) <<클라>>
+        +SupportsPredictedImpact() : 퍼짐 무기는 false
+        +GetAmmoAttribute() : 어떤 탄약 풀인가
+        +ShowMuzzleFlash() / PlayFireSound()
+        +PlayImpactEffectAt(Loc, Normal)
+        -MaxAmmo / FireInterval / FireRange
+        ..
+        CurrentAmmo / CanFire / HasAmmo / Reload 제거됨
+    }
+    class AWeaponRifle {
+        #FireInternal() <<hitscan>>
+        SupportsPredictedImpact = true
+    }
+    class AWeaponRocketLauncher {
+        #FireInternal() <<projectile>>
+    }
+    class AWeaponMachineGun {
+        #FireInternal() <<hitscan + VRandCone 퍼짐>>
+        SupportsPredictedImpact = false
+    }
+    class AProjectile <<복제>> {
+        bReplicates + SetReplicateMovement
+        +Multicast_PlayImpactFX()
+        #OnHit() : HasAuthority 게이트
+    }
+    class AProjectileRocket {
+        #Explode() : 반경 데미지 + 폭발 멀티캐스트
+    }
+}
+
+AWeaponBase <|-- AWeaponRifle
+AWeaponBase <|-- AWeaponRocketLauncher
+AWeaponBase <|-- AWeaponMachineGun
+
+ACommonCharacter *-- UWeaponManagerComponent
+UWeaponManagerComponent *-- AWeaponBase : 각 머신 로컬 스폰
+AProjectile <|-- AProjectileRocket
+AWeaponRocketLauncher ..> AProjectileRocket : spawns
+
+note bottom of UWeaponManagerComponent
+  무기 액터는 복제하지 않는다.
+  탄약이 어트리뷰트로 옮겨간 뒤 무기가 들고 있는 값은
+  전부 BP CDO 설정값뿐이므로, "어떤 종류를 들고 있는가"만
+  1바이트로 복제한다. (실측: 4회 / 0.0KB)
+end note
+
+' =================================================================
+' UI
+' =================================================================
+package "UI" #FFF0F5 {
+    class UTPSHUDWidget {
+        +InitFor(PlayerCharacter)
+        -BindToGameState() : 복제 지연 대비 재시도
+        -HandleLivesChanged / HandleEnemiesChanged
+    }
+    class UTPSGameOverWidget {
+        +SetResult(bVictory)
+        -HandleRestart()
+    }
+}
+
+ATPSPlayerController *-- UTPSHUDWidget
+ATPSPlayerController *-- UTPSGameOverWidget
+ATPSGameState ..> UTPSHUDWidget : 델리게이트
+
+' =================================================================
+' AI
+' =================================================================
+package "AI" #FFFCF0 {
+    class AEnemyAIController <<서버>> {
+        #OnPossess() / OnTargetPerceived()
+        -BehaviorTree / Perception
+        -Blackboard: TargetActor / bCanSeeTarget
+    }
+    class UEnemyCombatProfile <<DataAsset>> {
+        +WeaponType / WeaponClass / FireAbility
+        +PreferredRange / bBurstFire / bLeadTarget
+    }
+    class UEnemyCombatComponent {
+        +GrantFireAbilities / SwitchToRandomProfile
+        +GetFireAbilitySpecHandle / GetAttackRange
+    }
+    class UBTTask_FireWeapon {
+        탄약 없으면 재장전 트리거
+        (Cost가 붙어 발사 어빌리티가 활성화되지 않으므로)
+    }
+}
+
+AEnemyCharacter *-- UEnemyCombatComponent
+UEnemyCombatComponent *-- UEnemyCombatProfile
+UEnemyCombatComponent ..> UDifficultySubsystem
+AEnemyAIController ..> UBTTask_FireWeapon
+
+@enduml

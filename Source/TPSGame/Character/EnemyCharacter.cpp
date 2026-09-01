@@ -23,6 +23,7 @@
 #include "AbilitySystem/TPSAttributeSet.h"
 #include "Common/TPSLog.h"
 #include "Net/UnrealNetwork.h"
+#include "TPSGameGameMode.h"
 
 AEnemyCharacter::AEnemyCharacter()
 {
@@ -237,6 +238,12 @@ void AEnemyCharacter::HandleDeath()
     if (HasAuthority())
     {
         SetLifeSpan(CorpseLifeSpan);
+
+        // 승리 판정은 서버가 한다. 남은 적 수를 다시 세게 한다.
+        if (ATPSGameGameMode* GM = GetWorld()->GetAuthGameMode<ATPSGameGameMode>())
+        {
+            GM->NotifyEnemyDied(this);
+        }
     }
 }
 
@@ -249,4 +256,34 @@ FVector AEnemyCharacter::GetAimPoint() const
 void AEnemyCharacter::OnReloadFinished()
 {
     // 지금은 특별한 처리 없음.
+}
+
+void AEnemyCharacter::StopCombat()
+{
+    if (!HasAuthority()) return;
+
+    if (AAIController* AICon = Cast<AAIController>(GetController()))
+    {
+        if (UBrainComponent* Brain = AICon->GetBrainComponent())
+        {
+            Brain->StopLogic(TEXT("MatchEnded"));
+        }
+    }
+
+    /*
+        진행 중인 어빌리티를 끊는다.
+
+        BT를 멈춰도 이미 활성화된 발사 어빌리티는 몽타주가 끝날 때까지 살아 있고,
+        중간의 OnFireNotify가 발사를 수행한다. 승리 직후 적의 마지막 총알이
+        플레이어를 죽이면 결과가 뒤집힐 수 있다.
+    */
+    if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->CancelAllAbilities();
+    }
+
+    // BT 정지만으로는 관성으로 미끄러진다.
+    GetCharacterMovement()->StopMovementImmediately();
+
+    PendingTarget = nullptr;
 }

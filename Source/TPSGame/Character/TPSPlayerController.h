@@ -6,6 +6,7 @@
 
 class UTPSHUDWidget;
 class UTPSQuitConfirmWidget;
+class UTPSGameOverWidget;
 
 /**
 	HUD 소유/생성을 담당하는 플레이어 컨트롤러.
@@ -28,7 +29,28 @@ public:
     UFUNCTION(BlueprintCallable, Category="UI")
     void ConfirmQuit();
 
-public:
+    /*
+        게임오버 결과 화면 표시. 서버가 목숨 소진 시 호출한다.
+
+        MatchState 복제만으로도 클라이언트가 종료를 알 수는 있지만,
+        복제 도착과 위젯 준비 시점이 어긋날 수 있어 RPC로 직접 알린다.
+        게임오버는 매치당 한 번뿐이라 RPC 비용도 문제가 되지 않는다.
+    */
+    UFUNCTION(Client, Reliable)
+    void Client_ShowGameOver(bool bVictory);
+
+    /*
+        재시작 요청. 결과 화면의 버튼이 호출한다.
+
+        클라이언트에서 직접 레벨을 다시 로드할 수 없으므로 서버를 거친다.
+        서버는 게임오버 상태인지 재검증한 뒤에만 받아들인다.
+    */
+    UFUNCTION(Server, Reliable)
+    void Server_RequestRestart();
+
+    UFUNCTION(BlueprintCallable, Category="UI")
+    void RequestRestart();
+
 	/*
 		치트 진입점. UTPSCheatManager가 호출한다.
 
@@ -44,21 +66,32 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerCheatHealSelf();
 
+    // 재시작 시 결과 화면을 걷고 입력 모드를 게임으로 되돌린다.
+    UFUNCTION(Client, Reliable)
+    void Client_HideGameOver();
+
 protected:
     virtual void SetupInputComponent() override;
 
 	virtual void BeginPlay() override;
 
+    virtual void OnPossess(APawn* InPawn) override;
+
+    // 클라이언트 경로 — OnPossess는 서버 전용이라 원격 클라는 여기로 온다.
+    virtual void AcknowledgePossession(APawn* InPawn) override;
+
+protected:
     UPROPERTY(EditDefaultsOnly, Category="UI")
     TSubclassOf<UTPSQuitConfirmWidget> QuitConfirmWidgetClass;
 
     UPROPERTY(Transient)
     TObjectPtr<UTPSQuitConfirmWidget> QuitConfirmWidget;
 
-	virtual void OnPossess(APawn* InPawn) override;
+    UPROPERTY(EditDefaultsOnly, Category="UI")
+    TSubclassOf<UTPSGameOverWidget> GameOverWidgetClass;
 
-	// 클라이언트 경로 — OnPossess는 서버 전용이라 원격 클라는 여기로 온다.
-	virtual void AcknowledgePossession(APawn* InPawn) override;
+    UPROPERTY(Transient)
+    TObjectPtr<UTPSGameOverWidget> GameOverWidget;
 
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<UTPSHUDWidget> HUDClass;

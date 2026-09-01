@@ -17,6 +17,7 @@
 #include "Character/PlayerAimComponent.h"
 #include "Common/TPSGameDefine.h"
 #include "AbilitySystem/TPSAttributeSet.h"
+#include "Common/TPSLog.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -176,6 +177,12 @@ void APlayerCharacter::HandleDeath()
     if (!HasAuthority())
     {
         return;
+    }
+
+    if (!GetWorld())
+    {
+        UE_LOG(TPSLog, Error, TEXT("[SV] APlayerCharacter::HandleDeath() 월드가 유효하지 않음"));
+	    return;
     }
 
     if (ATPSGameGameMode* GM = GetWorld()->GetAuthGameMode<ATPSGameGameMode>())

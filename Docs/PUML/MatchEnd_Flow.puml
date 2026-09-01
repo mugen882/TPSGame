@@ -1,0 +1,334 @@
+' =====================================================================
+'  TPSGame 매치 종료 — 패배 / 승리 / 재시작
+'  렌더링: https://www.plantuml.com/plantuml  또는 VSCode PlantUML 확장
+' =====================================================================
+
+@startuml MatchEnd_Defeat
+title 패배 — 팀 목숨 소진
+
+skinparam sequenceMessageAlign center
+skinparam BoxPadding 10
+
+box "데디케이티드 서버" #FFF0F0
+  participant "APlayerCharacter" as PC
+  participant "ATPSGameGameMode" as GM
+  participant "ATPSGameState" as GS
+  participant "AEnemyCharacter" as EN
+end box
+
+box "클라 A (사망자)" #E8F4FF
+  participant "ATPSPlayerController" as CA
+  participant "UTPSHUDWidget" as HA
+end box
+
+box "클라 B (생존자)" #F0FFF0
+  participant "ATPSPlayerController" as CB
+  participant "UTPSHUDWidget" as HB
+end box
+
+PC -> PC : 체력 0 → HandleDeath()
+note right of PC
+  HasAuthority() 게이트.
+  GameMode는 서버에만 존재하므로
+  이 경로 자체가 서버 전용이다.
+end note
+
+PC -> GM : NotifyPlayerDied()
+activate GM
+
+GM -> GS : SetRemainingLives(N - 1)
+activate GS
+GS -> GS : 서버는 자기 OnRep을 받지 않으므로\n델리게이트를 직접 발화
+GS ->> HA : RemainingLives 복제 (COND_None)
+GS ->> HB : RemainingLives 복제
+deactivate GS
+
+note over GS #CCFFCC
+  **D26** 팀 공용 자원이므로 COND_None.
+  탄약(COND_OwnerOnly)과 반대다 —
+  전원이 같은 숫자를 봐야 판단을 공유한다.
+end note
+
+alt 목숨 > 0
+    GM -> GM : RespawnDelay 후\n옛 폰 Destroy + RestartPlayer
+    note right of GM #E8F4FF
+      D22 — 새 폰 = 새 ASC = 깨끗한 상태
+    end note
+else 목숨 == 0
+    GM -> GM : **EndMatchWithResult(false)**
+    activate GM #FFCCCC
+
+    GM -> GM : HasMatchEnded() 가드\n(동시 사망 시 중복 호출 방지)
+    GM -> GM : EndMatch()\nMatchState → WaitingPostMatch
+
+    GM -> EN : StopCombat()
+    activate EN
+    EN -> EN : Brain->StopLogic()\n"더 이상 쏘라고 하지 마라"
+    EN -> EN : CancelAllAbilities()\n"지금 쏘는 중인 것도 멈춰라"
+    EN -> EN : StopMovementImmediately()
+    deactivate EN
+
+    note right of EN #FFE0E0
+      **D27** BT만 멈추면 이미 활성화된
+      발사 어빌리티가 노티파이로 한 발 더 나간다.
+      승리 직후라면 결과가 뒤집힐 수 있다.
+    end note
+
+    GM ->> CA : Client_ShowGameOver(false)
+    GM ->> CB : Client_ShowGameOver(false)
+    deactivate GM
+end
+deactivate GM
+
+CA -> CA : 결과 화면 표시\nSetInputMode(UIOnly)
+CB -> CB : 결과 화면 표시\nSetInputMode(UIOnly)
+
+note over CA, CB #FFE0E0
+  **F16** SetInputMode는 컨트롤러에 걸린다.
+  SeamlessTravel에서 컨트롤러는 살아남으므로
+  재시작 시 반드시 되돌려야 한다.
+end note
+
+@enduml
+
+
+@startuml MatchEnd_Victory
+title 승리 — 적 전멸
+
+skinparam sequenceMessageAlign center
+skinparam BoxPadding 10
+
+box "데디케이티드 서버" #FFF0F0
+  participant "AEnemyCharacter" as EN
+  participant "ATPSGameGameMode" as GM
+  participant "ATPSGameState" as GS
+end box
+
+box "클라 A / B" #E8F4FF
+  participant "ATPSPlayerController" as CL
+  participant "UTPSHUDWidget" as HUD
+end box
+
+EN -> EN : 체력 0 → HandleDeath()
+EN -> EN : SetLifeSpan(CorpseLifeSpan)\n시체는 잠시 남는다
+EN -> GM : NotifyEnemyDied()
+activate GM
+
+GM -> GM : **RefreshEnemyCount()**
+GM -> GM : CountLivingEnemies()\nTActorIterator 순회
+
+note right of GM
+  **카운터를 들지 않고 매번 센다**
+  웨이브처럼 적이 나중에 스폰돼도 어긋나지 않는다.
+  순회는 사망 시점에만 돌므로 비용이 작다.
+
+  IsDead()가 State.Dead 태그를 보므로(D21)
+  시체가 남아 있어도 산 것으로 세지 않는다.
+end note
+
+GM -> GS : SetRemainingEnemies(N)
+GS ->> HUD : RemainingEnemies 복제
+HUD -> HUD : "남은 적 N" 갱신
+
+alt 살아 있는 적 > 0
+    GM -> GM : 계속 진행
+else 적 == 0
+    GM -> GM : HasMatchStarted() &&\nRemainingLives > 0 확인
+    note right of GM #FFFFCC
+      두 조건의 이유
+        HasMatchStarted : 적 없는 맵에서 즉시 승리 방지
+        RemainingLives  : 마지막 적과 마지막 플레이어가
+                          동시에 죽었을 때 패배가 승리로
+                          덮이는 것 방지
+    end note
+
+    GM -> GM : **EndMatchWithResult(true)**
+    activate GM #CCFFCC
+    GM -> GM : EndMatch() + StopAllEnemyAI()
+    GM ->> CL : Client_ShowGameOver(**true**)
+    deactivate GM
+end
+deactivate GM
+
+CL -> CL : SetResult(true)\n초록 "적을 모두 처치했습니다"
+
+note over CL #CCFFCC
+  패배와 **같은 배관**을 탄다.
+  EndMatchWithResult(bool) 하나로 결과만 갈린다.
+end note
+
+@enduml
+
+
+@startuml MatchEnd_Restart
+title 재시작 — 클라 버튼에서 ServerTravel까지
+
+skinparam sequenceMessageAlign center
+skinparam BoxPadding 10
+
+box "클라 A (버튼 누른 사람)" #E8F4FF
+  participant "UTPSGameOverWidget" as W
+  participant "ATPSPlayerController" as CA
+end box
+
+box "데디케이티드 서버" #FFF0F0
+  participant "ATPSPlayerController\n(서버 측 인스턴스)" as SPC
+  participant "ATPSGameGameMode" as GM
+  participant "ATPSGameState" as GS
+end box
+
+box "클라 B" #F0FFF0
+  participant "ATPSPlayerController" as CB
+end box
+
+W -> W : Restart 버튼 클릭
+W -> W : 버튼 비활성화 (중복 클릭 방지)
+W -> CA : PC->RequestRestart()
+CA ->> SPC : **Server_RequestRestart()** (RPC)
+activate SPC
+
+note right of SPC
+  클라이언트는 레벨을 다시 로드할 수 없다.
+  ServerTravel은 서버만 수행한다.
+end note
+
+SPC -> GM : RequestRestartMatch()
+activate GM
+
+GM -> GM : **HasMatchEnded() 재검증**
+note right of GM #FFE0E0
+  **D14의 원칙** — 클라 요청은 서버가 다시 판단한다.
+  진행 중에 통과시키면 누구든 매치를 리셋할 수 있다.
+end note
+
+alt 게임오버 상태가 아님
+    GM -> GM : 거부 + 경고 로그
+else 게임오버 상태
+    GM ->> CA : Client_HideGameOver()
+    GM ->> CB : Client_HideGameOver()
+    note over CA, CB #FFFFCC
+      **트래블 전에** 입력 모드를 되돌린다(F16).
+      SeamlessTravel에서 컨트롤러가 살아남으므로
+      UIOnly가 새 맵까지 따라온다.
+    end note
+
+    GM -> GM : **RestartGame()** → ServerTravel
+end
+deactivate GM
+deactivate SPC
+
+== 새 맵 로드 (bUseSeamlessTravel) ==
+
+note over CA, CB
+  클라이언트는 재접속 없이 따라온다.
+  **PlayerController는 파괴되지 않고 살아남는다.**
+  폰 / ASC / 무기는 전부 새로 만들어진다.
+end note
+
+GM -> GS : BeginPlay → SetRemainingLives(TotalLives)
+GM -> GM : RefreshEnemyCount()
+GS ->> CA : 목숨 / 적 수 복제
+GS ->> CB : 목숨 / 적 수 복제
+
+GM -> GM : (엔진) HandleStartingNewPlayer\n→ RestartPlayer → 새 폰 스폰·빙의
+note right of GM
+  트래블 후 컨트롤러가 새 월드에 들어오면
+  엔진이 자동으로 호출한다.
+  M3의 사망 리스폰은 우리 코드가 직접 부르지만
+  이쪽은 최초 접속과 같은 경로다.
+end note
+
+GM -> CA : 새 폰 빙의
+CA -> CA : SetupHUDFor()\n결과 화면 잔존 시 한 번 더 정리
+note right of CA
+  RPC가 트래블 중 유실될 수 있으므로
+  빙의 시점이 확실한 보루다.
+end note
+
+GM -> CB : 새 폰 빙의
+CB -> CB : SetupHUDFor()
+
+note over CA, CB
+  HandleStartingNewPlayer는 **각 컨트롤러마다** 호출된다.
+  트래블 후 새 월드에 들어오는 모든 플레이어가 대상이며,
+  재시작 버튼을 누른 것이 A라는 점 외에는 두 클라가 완전히 대칭이다.
+end note
+
+@enduml
+
+
+@startuml MatchEnd_Structure
+title 매치 종료 — 책임 분리
+
+skinparam classAttributeIconSize 0
+
+class ATPSGameGameMode <<서버 전용>> {
+  +NotifyPlayerDied(DeadCharacter)
+  +NotifyEnemyDied(DeadEnemy)
+  +RequestRestartMatch()
+  --
+  -EndMatchWithResult(bVictory)
+  -StopAllEnemyAI()
+  -CountLivingEnemies() : int32
+  -RefreshEnemyCount()
+  --
+  +TotalLives : int32
+  +RespawnDelay : float
+}
+
+class ATPSGameState <<복제>> {
+  -RemainingLives  <<COND_None>>
+  -RemainingEnemies <<COND_None>>
+  --
+  +OnLivesChanged
+  +OnEnemiesChanged
+  --
+  +SetRemainingLives()  <<서버>>
+  +SetRemainingEnemies() <<서버>>
+}
+
+class ATPSPlayerController {
+  +Client_ShowGameOver(bVictory) <<Client RPC>>
+  +Client_HideGameOver()         <<Client RPC>>
+  +Server_RequestRestart()       <<Server RPC>>
+  +RequestRestart()
+}
+
+class UTPSHUDWidget {
+  -BindToGameState()
+  -HandleLivesChanged(int32)
+  -HandleEnemiesChanged(int32)
+}
+
+class UTPSGameOverWidget {
+  +SetResult(bVictory)
+  -HandleRestart()
+}
+
+class AEnemyCharacter {
+  +StopCombat()
+  ..
+  BT 정지 + 어빌리티 취소 + 이동 정지
+}
+
+ATPSGameGameMode --> ATPSGameState : 상태 갱신 (서버)
+ATPSGameGameMode --> ATPSPlayerController : Client RPC
+ATPSGameGameMode --> AEnemyCharacter : StopCombat
+ATPSGameState ..> UTPSHUDWidget : 델리게이트 (복제 후)
+ATPSPlayerController --> UTPSGameOverWidget : 생성 / 결과 전달
+UTPSGameOverWidget --> ATPSPlayerController : 재시작 요청
+
+note bottom of ATPSGameState
+  **GameMode는 서버에만 존재한다.**
+  클라이언트가 매치 상태를 알 수 있는 유일한 통로가
+  GameState이므로 목숨과 적 수를 여기에 둔다(D26).
+end note
+
+note bottom of UTPSHUDWidget
+  GameState가 컨트롤러보다 늦게 복제될 수 있다.
+  BindToGameState는 실패 시 다음 틱에 재시도하고,
+  성공하면 현재 값을 한 번 직접 반영한다.
+  (바인딩 전에 이미 값이 도착했을 수 있다 — F4와 같은 형태)
+end note
+
+@enduml

@@ -11,6 +11,8 @@
 #include "AbilitySystem/TPSAttributeSet.h"
 #include "AbilitySystemComponent.h"
 #include "Common/TPSLog.h"
+#include "UI/TPSGameOverWidget.h"
+#include "TPSGameGameMode.h"
 
 ATPSPlayerController::ATPSPlayerController()
 {
@@ -53,6 +55,15 @@ void ATPSPlayerController::SetupHUDFor(APawn* InPawn)
     if (!IsLocalController())
     {
         return;
+    }
+
+    // 트래블 등으로 결과 화면이 남아 있을 수 있다. 새 폰에 빙의하면 정리한다.
+    if (GameOverWidget)
+    {
+        GameOverWidget->RemoveFromParent();
+        GameOverWidget = nullptr;
+        SetShowMouseCursor(false);
+        SetInputMode(FInputModeGameOnly());
     }
 
     APlayerCharacter* PlayerCharacter = Cast<APlayerCharacter>(InPawn);
@@ -223,4 +234,64 @@ void ATPSPlayerController::ServerCheatHealSelf_Implementation()
 		UTPSAttributeSet::GetHealthAttribute(), EGameplayModOp::Override, MaxHealth);
 
 	UE_LOG(TPSLog, Log, TEXT("[SV] TPSHealSelf — %s 체력 %.1f"), *CheatTarget->GetName(), MaxHealth);
+}
+
+void ATPSPlayerController::Client_ShowGameOver_Implementation(bool bVictory)
+{
+    if (!IsLocalController()) return;
+
+    if (!GameOverWidget && GameOverWidgetClass)
+    {
+        GameOverWidget = CreateWidget<UTPSGameOverWidget>(this, GameOverWidgetClass);
+        if (GameOverWidget)
+        {
+            GameOverWidget->AddToViewport(10);   // HUD 위에 그린다
+        }
+    }
+
+    if (!GameOverWidget) return;
+
+    GameOverWidget->SetResult(bVictory);
+    GameOverWidget->SetVisibility(ESlateVisibility::Visible);
+
+    /*
+        결과 화면에서는 마우스로 버튼을 눌러야 하므로 입력 모드를 바꾼다.
+        게임 입력은 이미 캐릭터가 죽어 DisableInput 상태다.
+    */
+    SetShowMouseCursor(true);
+    SetInputMode(FInputModeUIOnly());
+}
+
+void ATPSPlayerController::RequestRestart()
+{
+    // 로컬에서 버튼을 누르면 서버로 넘긴다. 레벨 재로드는 서버만 할 수 있다.
+    Server_RequestRestart();
+}
+
+void ATPSPlayerController::Server_RequestRestart_Implementation()
+{
+    if (ATPSGameGameMode* GM = GetWorld()->GetAuthGameMode<ATPSGameGameMode>())
+    {
+        GM->RequestRestartMatch();
+    }
+}
+
+void ATPSPlayerController::Client_HideGameOver_Implementation()
+{
+    if (!IsLocalController()) return;
+
+    if (GameOverWidget)
+    {
+        GameOverWidget->RemoveFromParent();
+        GameOverWidget = nullptr;
+    }
+
+    /*
+        입력 모드를 게임으로 되돌린다.
+
+        SeamlessTravel에서는 PlayerController가 살아남으므로 UIOnly 상태가
+        새 맵까지 따라온다. 결과 화면을 띄울 때 바꾼 것은 반드시 되돌려야 한다.
+    */
+    SetShowMouseCursor(false);
+    SetInputMode(FInputModeGameOnly());
 }

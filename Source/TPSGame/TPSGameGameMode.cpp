@@ -6,6 +6,10 @@
 #include "Common/TPSLog.h"
 #include "GameFramework/GameState.h"
 #include "GameFramework/PlayerController.h"
+#include "Game/TPSGameState.h"
+#include "Character/TPSPlayerController.h"
+#include "Character/EnemyCharacter.h"
+#include "EngineUtils.h"
 
 ATPSGameGameMode::ATPSGameGameMode()
 {
@@ -22,6 +26,8 @@ ATPSGameGameMode::ATPSGameGameMode()
 	}
 
 	// 맵 이동 시 PlayerState/커넥션을 유지한다. 코옵에서 재접속 없이 맵을 넘기기 위해 필요.
+	GameStateClass = ATPSGameState::StaticClass();
+
 	bUseSeamlessTravel = true;
 
 	// 모든 플레이어가 들어올 때까지 기다리지 않고 바로 시작.
@@ -32,6 +38,20 @@ ATPSGameGameMode::ATPSGameGameMode()
 void ATPSGameGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (ATPSGameState* GS = GetTPSGameState())
+	{
+		GS->SetRemainingLives(TotalLives);
+	}
+
+	/*
+		레벨에 배치된 적을 센다.
+
+		카운터를 미리 잡아두지 않고 매번 순회하는 이유는, 웨이브처럼 적이
+		나중에 스폰되는 구조로 가도 어긋나지 않기 때문이다. 순회는 적이
+		죽는 시점에만 돌므로 비용이 문제되지 않는다.
+	*/
+	RefreshEnemyCount();
 	
 }
 
@@ -46,8 +66,24 @@ void ATPSGameGameMode::NotifyPlayerDied(APlayerCharacter* DeadCharacter)
 		return;
 	}
 
-	UE_LOG(TPSLog, Verbose, TEXT("[SV] %s 사망 — %.1f초 후 리스폰"),
-		*DeadCharacter->GetName(), RespawnDelay);
+	ATPSGameState* GS = GetTPSGameState();
+	if (!GS) return;
+
+	const int32 NewLives = FMath::Max(0, GS->GetRemainingLives() - 1);
+	GS->SetRemainingLives(NewLives);
+
+	UE_LOG(TPSLog, Warning, TEXT("[SV] %s 사망 — 남은 목숨 %d"),
+		*DeadCharacter->GetName(), NewLives);
+
+	if (NewLives <= 0)
+	{
+		/*
+			목숨 소진. 리스폰하지 않고 게임오버로 넘어간다.
+			이미 죽은 폰은 래그돌로 남겨두어 결과 화면 뒤로 보이게 한다.
+		*/
+		EndMatchWithResult(false);
+		return;
+	}
 
 	/*
 		약참조로 캡처한다.
@@ -99,4 +135,130 @@ void ATPSGameGameMode::RespawnPlayer(TWeakObjectPtr<AController> ControllerPtr, 
 	RestartPlayer(PC);
 
 	UE_LOG(TPSLog, Verbose, TEXT("[SV] %s 리스폰 완료"), *PC->GetName());
+}
+
+void ATPSGameGameMode::EndMatchWithResult(bool bVictory)
+{
+	if (HasMatchEnded()) return;   // 동시 사망 등으로 중복 호출될 수 있다
+	if (!GetWorld()) return;
+
+	UE_LOG(TPSLog, Warning, TEXT("[SV] 매치 종료 — %s"),
+		bVictory ? TEXT("승리") : TEXT("패배"));
+
+	/*
+		AGameMode::EndMatch()가 MatchState를 WaitingPostMatch로 바꾸고,
+		그 값이 GameState를 통해 모든 클라이언트에 복제된다.
+		GameMode를 AGameModeBase가 아니라 AGameMode로 승격해둔 것이 여기서 쓰인다.
+
+		다만 MatchState 복제만으로는 UI를 띄우기에 타이밍이 불확실하므로
+		각 컨트롤러에 Client RPC를 따로 보낸다.
+	*/
+	EndMatch();
+
+	// 결과 화면 뒤에서 적이 계속 움직이지 않도록 정지시킨다.
+	StopAllEnemyAI();
+
+	int32 NotifiedCount = 0;
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		AController* C = It->Get();
+		ATPSPlayerController* PC = Cast<ATPSPlayerController>(C);
+
+		UE_LOG(TPSLog, Verbose, TEXT("[SV] PC 순회: %s (캐스트 %s)"),
+			*GetNameSafe(C), PC ? TEXT("성공") : TEXT("실패"));
+
+		if (PC)
+		{
+			PC->Client_ShowGameOver(bVictory);
+			++NotifiedCount;
+		}
+	}
+	UE_LOG(TPSLog, Verbose, TEXT("[SV] 게임오버 통지 %d명"), NotifiedCount);
+}
+
+void ATPSGameGameMode::NotifyEnemyDied(AEnemyCharacter* DeadEnemy)
+{
+	if (HasMatchEnded()) return;
+
+	RefreshEnemyCount();
+}
+
+int32 ATPSGameGameMode::CountLivingEnemies() const
+{
+	int32 Count = 0;
+	for (TActorIterator<AEnemyCharacter> It(GetWorld()); It; ++It)
+	{
+		AEnemyCharacter* Enemy = *It;
+		// IsDead()는 State.Dead 태그를 본다.
+		if (Enemy && !Enemy->IsDead())
+		{
+			++Count;
+		}
+	}
+	return Count;
+}
+
+void ATPSGameGameMode::RefreshEnemyCount()
+{
+	ATPSGameState* GS = GetTPSGameState();
+	if (!GS) return;
+
+	const int32 Living = CountLivingEnemies();
+	GS->SetRemainingEnemies(Living);
+
+	// 적이 원래 없는 맵에서 즉시 승리가 뜨지 않도록 매치 시작 여부를 함께 본다.
+	if (Living <= 0 && HasMatchStarted() && GS->GetRemainingLives() > 0)
+	{
+		EndMatchWithResult(true);
+	}
+}
+
+void ATPSGameGameMode::RequestRestartMatch()
+{
+	/*
+		게임오버 상태에서만 받아들인다.
+
+		클라이언트가 보낸 요청이므로 서버가 조건을 재검증한다.
+		진행 중에 호출되면 누구든 매치를 리셋할 수 있게 된다.
+	*/
+	if (!HasMatchEnded())
+	{
+		UE_LOG(TPSLog, Warning, TEXT("[SV] 재시작 요청 거부 — 게임오버 상태가 아님"));
+		return;
+	}
+
+	UE_LOG(TPSLog, Warning, TEXT("[SV] 매치 재시작"));
+
+	// 트래블 전에 결과 화면을 걷는다. SeamlessTravel에서 컨트롤러가 살아남으므로
+	// 입력 모드를 되돌리지 않으면 새 맵에서 조작이 먹지 않는다.
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (ATPSPlayerController* PC = Cast<ATPSPlayerController>(It->Get()))
+		{
+			PC->Client_HideGameOver();
+		}
+	}
+
+	/*
+		RestartGame()은 현재 레벨을 ServerTravel로 다시 로드한다.
+		bUseSeamlessTravel이 켜져 있어 클라이언트는 재접속 없이 따라온다.
+		모든 액터가 새로 만들어지므로 목숨은 BeginPlay에서 다시 초기화된다.
+	*/
+	RestartGame();
+}
+
+ATPSGameState* ATPSGameGameMode::GetTPSGameState() const
+{
+	return GetGameState<ATPSGameState>();
+}
+
+void ATPSGameGameMode::StopAllEnemyAI()
+{
+	for (TActorIterator<AEnemyCharacter> It(GetWorld()); It; ++It)
+	{
+		AEnemyCharacter* Enemy = *It;
+		if (!Enemy || Enemy->IsDead()) continue;
+
+		Enemy->StopCombat();
+	}
 }

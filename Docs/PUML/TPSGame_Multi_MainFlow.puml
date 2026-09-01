@@ -1,0 +1,228 @@
+' TPSGame 메인 런타임 흐름 (코옵 멀티플레이)
+' 한글이 깨지면 렌더러에서 CJK 폰트를 지정하세요:
+'   skinparam defaultFontName "Malgun Gothic"  (Windows)
+'   skinparam defaultFontName "Noto Sans CJK KR" (Linux/Mac)
+'
+' 스윔레인을 "모듈"이 아니라 "머신"으로 잡았다.
+' 멀티플레이에서는 어느 클래스가 하는가보다 어느 머신에서 도는가가 먼저다.
+
+@startuml TPSGame_FireFlow
+title TPSGame 메인 흐름 — 발사 (플레이어)
+
+skinparam shadowing false
+skinparam ActivityBackgroundColor #EEEDFE
+skinparam ActivityBorderColor #534AB7
+skinparam ActivityDiamondBackgroundColor #FAEEDA
+skinparam ActivityDiamondBorderColor #BA7517
+
+|#E6F1FB|클라이언트 (사격자)|
+start
+:FireAction 입력\n(홀드 시 Tick이 반복);
+:APlayerCharacter::TryFire();
+note right
+  탄약 없으면 GA_Reload 로 전환
+  쿨다운 GE가 발사 간격을 강제하므로
+  간격보다 빨리 나가지 않는다
+end note
+
+:ASC->TryActivateAbilitiesByTag;
+:CanActivateAbility / CheckCost;
+note right
+  탄약 부족이면 어빌리티가
+  활성화조차 되지 않는다
+  (Cost GE가 CanApplyAttributeModifiers로 판정)
+end note
+
+:**PredictionKey 발급**;
+:GA_FireBase::ActivateAbility;
+:CommitAbility() → ApplyCost;
+note right #CCFFCC
+  예측 차감. 클라 탄약이 즉시 줄고
+  서버가 거부하면 롤백된다
+end note
+
+:FireOnce() — bLocal=1, bAuth=0;
+:ComputeLocalAimPoint()\n카메라 기준;
+:PredictFireCues()\n머즐 / 발사음 / 예측 탄착;
+note right
+  Cue를 예측 키와 함께 실행 →
+  서버 멀티캐스트가 와도 건너뛴다
+end note
+
+|#FDF0F0|서버 (권위)|
+:ServerTryActivateAbility 수신;
+:**CanActivateAbility / CheckCost 재검증**;
+note right #FFE0E0
+  클라 판정을 전달받지 않는다.
+  자기 상태로 처음부터 다시 판단한다
+end note
+
+:FireOnce() — bLocal=0, bAuth=1;
+:BeginWaitForClientAim()\n+ 타임아웃 1초;
+
+|#E6F1FB|클라이언트 (사격자)|
+:ServerSetReplicatedTargetData\n(FTPSTargetData_AimPoint);
+:EndAbility;
+
+|#FDF0F0|서버 (권위)|
+:OnClientAimPointReceived;
+:**ValidateAimPoint()**\n사거리 클램프 / 후방 거부;
+note right
+  총구 위치는 서버 자기 무기에서 계산.
+  클라가 보낸 값을 쓰지 않는다
+end note
+
+:ComputeRewindSeconds()\nRTT + 보간지연 (최대 0.3s);
+:FTPSLagCompensationScope 진입\n사격자 제외 전원 되감기;
+:Weapon->FireAuthoritative()\n트레이스 + 데미지;
+:스코프 종료 → 캡슐 원위치;
+note right #FFFFCC
+  한 프레임 안에서 되감았다 복원하므로
+  다른 시스템은 관측하지 못한다
+end note
+
+:ExecuteFireCue / ExecuteImpactCue\n(예측 키 실어서 멀티캐스트);
+
+|#EFFAF0|다른 클라이언트|
+:GameplayCue_Weapon_Fire / _Impact;
+note right
+  IsLocalClientKey() == false → 재생
+  (사격자는 이미 예측 재생했으므로 건너뜀)
+end note
+:적 Health 어트리뷰트 복제 수신;
+stop
+@enduml
+
+
+@startuml TPSGame_EnemyFireFlow
+title TPSGame 메인 흐름 — 발사 (적 AI)
+
+skinparam shadowing false
+skinparam ActivityBackgroundColor #EEEDFE
+skinparam ActivityBorderColor #534AB7
+skinparam ActivityDiamondBackgroundColor #FAEEDA
+skinparam ActivityDiamondBorderColor #BA7517
+
+|#FDF0F0|서버 (권위)|
+start
+:BTTask_FireWeapon::ExecuteTask;
+if (탄약 있음?) then (없음)
+  :GA_Reload 활성화;
+  stop
+else (있음)
+endif
+:ASC->TryActivateAbility;
+:GA_FireBase::ActivateAbility;
+:CommitAbility() → Cost + 쿨다운;
+
+:PlayFireMontage()\nUAbilityTask_PlayMontageAndWait;
+note right
+  AbilityTask라 시뮬레이티드 프록시까지
+  몽타주가 복제된다
+end note
+
+:AnimNotify_Fire → OnFireNotify();
+:FireOnce() — bLocal=1, bAuth=1;
+note right #FFFFCC
+  AI는 서버가 조종 주체다.
+  조준점을 스스로 알므로 왕복도, 되감기도 없다
+end note
+:FireAuthoritative()\n트레이스 + 데미지 + Cue;
+
+|#EFFAF0|모든 클라이언트|
+:GameplayCue_Weapon_Fire / _Impact;
+note right
+  예측 키가 없으므로 전원이 재생한다
+end note
+:플레이어 Health 복제 수신;
+stop
+@enduml
+
+
+@startuml TPSGame_DamageFlow
+title TPSGame 메인 흐름 — 데미지 / 사망 / 매치 종료
+
+skinparam shadowing false
+skinparam ActivityBackgroundColor #EEEDFE
+skinparam ActivityBorderColor #534AB7
+skinparam ActivityDiamondBackgroundColor #FAEEDA
+skinparam ActivityDiamondBorderColor #BA7517
+
+|#FDF0F0|서버 (권위)|
+start
+:AWeaponBase::FireInternal 명중;
+:ACommonCharacter::ApplyDamageEffect;
+note right
+  **가해자 ASC**로 스펙 생성 후 대상에 적용.
+  피해자 ASC로 만들면 킬 어트리뷰션이 깨진다.
+  HasAuthority() 게이트 있음
+end note
+
+:TPSAttributeSet::PostGameplayEffectExecute\nDamage(메타) → Health 차감;
+
+if (Health <= 0 ?) then (아니오)
+  :OnDamaged();
+  |#E6F1FB|클라이언트|
+  :Health 복제 → 체력바 갱신;
+  :LastDamageInstigator 복제\n(OwnerOnly) → 방향성 비네트;
+  stop
+else (예)
+endif
+
+|#FDF0F0|서버 (권위)|
+:ServerHandleDeathAuthority();
+:**GE_Dead 적용**\n(Infinite, Granted: State.Dead);
+note right #FFE0E0
+  Loose 태그는 복제되지 않는다.
+  GE가 부여한 태그는 ReplicationMode와 무관하게
+  전원에게 복제되므로 늦게 접속해도 일관된다
+end note
+
+|#EFFAF0|모든 클라이언트|
+:태그 복제 → OnDeadTagChanged;
+:HandleDeath() — 로컬 연출\n래그돌 / 이동정지 / 콜리전 해제;
+note right
+  단일 진실원(태그) + 로컬 반응.
+  각 머신이 체력 0을 관측하던 구조를 뒤집었다
+end note
+
+|#FDF0F0|서버 (권위)|
+if (죽은 대상?) then (적)
+  :SetLifeSpan(CorpseLifeSpan);
+  :GameMode::NotifyEnemyDied;
+  :RefreshEnemyCount()\nTActorIterator로 산 적 계수;
+  if (살아 있는 적 == 0 ?) then (예)
+    |#E8FFE8|매치 종료|
+    :EndMatchWithResult(**true**) — 승리;
+  else (아니오)
+    stop
+  endif
+else (플레이어)
+  :GameMode::NotifyPlayerDied;
+  :GameState->SetRemainingLives(N-1);
+  if (목숨 > 0 ?) then (예)
+    :RespawnDelay 후\n옛 폰 Destroy + RestartPlayer;
+    note right
+      새 폰 = 새 ASC = 깨끗한 상태.
+      초기화 3경로가 전부 다시 실행된다
+    end note
+    stop
+  else (아니오)
+    |#FCEBEB|매치 종료|
+    :EndMatchWithResult(**false**) — 패배;
+  endif
+endif
+
+|#FDF0F0|서버 (권위)|
+:EndMatch()\nMatchState → WaitingPostMatch;
+:StopAllEnemyAI()\nBT 정지 + 어빌리티 취소;
+note right
+  BT만 멈추면 이미 활성화된 발사 어빌리티가
+  노티파이로 한 발 더 나간다
+end note
+:Client_ShowGameOver(bVictory)\n각 컨트롤러에 개별 전송;
+
+|#EFFAF0|모든 클라이언트|
+:결과 화면 표시\nSetInputMode(UIOnly);
+stop
+@enduml

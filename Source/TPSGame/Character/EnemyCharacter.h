@@ -40,6 +40,16 @@ public:
 
 	void HandleDeath() override;
 
+	/*
+		전투 중단. 매치 종료 시 GameMode가 호출한다. 서버 전용.
+
+		HandleDeath와 달리 살아 있는 상태로 멈추기만 한다.
+		BT만 멈추면 이미 활성화된 발사 어빌리티가 몽타주 노티파이로 한 발 더
+		나갈 수 있으므로 어빌리티도 함께 끊는다. 매치가 끝난 뒤의 데미지는
+		결과를 뒤집을 수 있다.
+	*/
+	void StopCombat();
+
 	// 사망 후 시체가 남아 있는 시간 (서버에서만 적용)
 	UPROPERTY(EditDefaultsOnly, Category = "Enemy")
 	float CorpseLifeSpan = 5.0f;

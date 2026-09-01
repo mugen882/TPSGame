@@ -29,6 +29,18 @@ public:
 	APlayerCharacter* GetOwningCharacter() const { return OwnerCharacter.Get(); }
 
 protected:
+	virtual void NativeConstruct() override;
+
+	UFUNCTION()
+	void BindToGameState();
+
+	UFUNCTION()
+	void HandleLivesChanged(int32 NewLives);
+
+	UFUNCTION()
+	void HandleEnemiesChanged(int32 NewCount);
+
+protected:
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UCrosshairWidget> Crosshair;
 
@@ -40,6 +52,14 @@ protected:
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UVignetteWidget> Vignette;
+
+	// 팀 공용 남은 목숨. 레이아웃에 없으면 표시만 생략된다.
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> LivesText;
+
+	// 남은 적 수. 진행도 표시용이라 없어도 동작하도록 Optional.
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> EnemiesText;
 
 private:
 	TWeakObjectPtr<APlayerCharacter> OwnerCharacter;
