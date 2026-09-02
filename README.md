@@ -42,7 +42,7 @@
 |---|---|---|
 | [랙 보상 되감기](https://youtu.be/qdlC1XSSBCA) | 지연 500ms에서 현재(녹색)·되감은(청록) 캡슐이 벌어지는 장면 | D23 |
 | [A/B 측정 로그](Docs/Media/m4_ab_measurement_log.png) | `★ 보상으로 명중` — 보상이 없었다면 빗나갔을 발사 | D24 |
-| [Cue 연출 전파](https://github.com/user-attachments/assets/16fd2bf6-02ed-4c0a-a128-09cdbccb2b54) | 두 창에서 상대의 발사 연출이 보이는 것 | D15, D16 |
+| [Cue 연출 전파](https://youtu.be/d8srbBLMGX0) | 두 창에서 상대의 발사 연출이 보이는 것 | D15, D16 |
 | [대역폭 실측](Docs/Media/m5_networkprofiler_actors.png) | `All Actors` 목록에 무기 액터가 없음 | D6, D9 |
 | [매치 종료](https://youtu.be/NpZOq8gYMqk) | 양쪽 화면에 결과가 동시에 표시됨 | D26 |
 
@@ -315,7 +315,7 @@ if (IsOwnerActorAuthoritative() || PredictionKey.IsLocalClientKey() == false)
 
 적은 예측 키가 없는 것이 맞다 — 아무도 예측하지 않았으므로 전원이 재생해야 한다.
 
-[▶ Cue 연출 전파 영상](https://github.com/user-attachments/assets/16fd2bf6-02ed-4c0a-a128-09cdbccb2b54)
+[▶ Cue 연출 전파 영상](https://youtu.be/d8srbBLMGX0)
 
 *왼쪽에서 발사하면 오른쪽 화면에도 머즐과 탄착이 나타난다. M2b-2 이전에는 각자 자기 발사만 보였다.*
 
