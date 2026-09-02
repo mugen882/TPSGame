@@ -40,11 +40,11 @@
 
 | 자료 | 내용 | 관련 |
 |---|---|---|
-| [랙 보상 되감기](docs/media/m4_lag_compensation_rewind.mp4) | 지연 500ms에서 현재(녹색)·되감은(청록) 캡슐이 벌어지는 장면 | D23 |
-| [A/B 측정 로그](docs/media/m4_ab_measurement_log.png) | `★ 보상으로 명중` — 보상이 없었다면 빗나갔을 발사 | D24 |
-| [Cue 연출 전파](docs/media/m2b2_cue_replication.mp4) | 두 창에서 상대의 발사 연출이 보이는 것 | D15, D16 |
-| [대역폭 실측](docs/media/m5_networkprofiler_actors.png) | `All Actors` 목록에 무기 액터가 없음 | D6, D9 |
-| [매치 종료](docs/media/matchend_victory_defeat.mp4) | 양쪽 화면에 결과가 동시에 표시됨 | D26 |
+| [랙 보상 되감기](https://youtu.be/qdlC1XSSBCA) | 지연 500ms에서 현재(녹색)·되감은(청록) 캡슐이 벌어지는 장면 | D23 |
+| [A/B 측정 로그](Docs/Media/m4_ab_measurement_log.png) | `★ 보상으로 명중` — 보상이 없었다면 빗나갔을 발사 | D24 |
+| [Cue 연출 전파](https://github.com/user-attachments/assets/16fd2bf6-02ed-4c0a-a128-09cdbccb2b54) | 두 창에서 상대의 발사 연출이 보이는 것 | D15, D16 |
+| [대역폭 실측](Docs/Media/m5_networkprofiler_actors.png) | `All Actors` 목록에 무기 액터가 없음 | D6, D9 |
+| [매치 종료](https://youtu.be/NpZOq8gYMqk) | 양쪽 화면에 결과가 동시에 표시됨 | D26 |
 
 ---
 
@@ -315,7 +315,7 @@ if (IsOwnerActorAuthoritative() || PredictionKey.IsLocalClientKey() == false)
 
 적은 예측 키가 없는 것이 맞다 — 아무도 예측하지 않았으므로 전원이 재생해야 한다.
 
-[▶ Cue 연출 전파 영상](docs/media/m2b2_cue_replication.mp4)
+[▶ Cue 연출 전파 영상](https://github.com/user-attachments/assets/16fd2bf6-02ed-4c0a-a128-09cdbccb2b54)
 
 *왼쪽에서 발사하면 오른쪽 화면에도 머즐과 탄착이 나타난다. M2b-2 이전에는 각자 자기 발사만 보였다.*
 
@@ -481,7 +481,7 @@ D1을 정할 때 "리스폰 간 지속되어야 할 상태가 생기면 재검�
 
 **보간이 필요한 이유** — 60Hz로 기록해도 요청 시각이 스냅샷과 정확히 겹치는 일은 드물다. 보간하지 않으면 최대 16ms 어긋나고, 초속 300cm로 움직이는 적이면 그것만으로 5cm다. 캡슐 반지름(34cm) 경계에서 판정이 갈린다.
 
-[▶ 랙 보상 되감기 영상](docs/media/m4_lag_compensation_rewind.mp4)
+[▶ 랙 보상 되감기 영상](https://youtu.be/qdlC1XSSBCA)
 
 *지연 500ms. 녹색이 적의 현재 위치, 청록이 되감은 위치다. 두 캡슐 사이 거리가 곧 클라이언트가 보고 있던 시점과 서버 현재 시점의 간극이며, 서버는 청록 위치로 판정한다.*
 
@@ -511,7 +511,7 @@ D1을 정할 때 "리스폰 간 지속되어야 할 상태가 생기면 재검�
 
 조준을 완벽히 할 필요도, 화면을 관찰할 필요도 없어졌고 판정이 로그 한 줄로 객관화되었다.
 
-![A/B 측정 로그](docs/media/m4_ab_measurement_log.png)
+![A/B 측정 로그](Docs/Media/m4_ab_measurement_log.png)
 
 **같은 계열의 장치들** — M0의 네트워크 로그 접두사(`[SV|Authority|Dedicated]`), M2b의 `NetEmulation.PktLag` A/B 루틴, 마일스톤별 통과 조건. 전부 **"동작을 눈으로 확인할 수 없는 영역"에 관측 수단을 먼저 만든 것**이다. 네트워크 코드가 조용히 실패한다는 성질(회고 참조)을 감안하면 이것이 선택이 아니라 전제에 가깝다.
 
@@ -561,7 +561,7 @@ OnlyTickPoseWhenRendered 등으로 바꾸면 그때 다시 문제가 된다.
 
 **복제 조건이 탄약과 반대다.** 탄약은 `COND_OwnerOnly`(D9) — 남의 탄약은 누구도 볼 필요가 없다. 목숨과 남은 적 수는 `COND_None` — 전원이 같은 숫자를 봐야 판단을 공유할 수 있다. **누가 그 정보로 결정을 내리는가**가 조건을 가른다.
 
-[▶ 매치 종료 영상](docs/media/matchend_victory_defeat.mp4)
+[▶ 매치 종료 영상](https://youtu.be/NpZOq8gYMqk)
 
 *목숨이 양쪽 화면에서 함께 줄고, 소진 시 두 클라이언트에 동시에 결과가 표시된다.*
 
@@ -860,7 +860,7 @@ RPC 상위:
 | `ServerSetReplicatedTargetData` | **0.3 KB** |
 | `Client_NotifyHitConfirmed` | 0.0 KB |
 
-![대역폭 실측](docs/media/m5_networkprofiler_actors.png)
+![대역폭 실측](Docs/Media/m5_networkprofiler_actors.png)
 
 **D6 검증** — `All Actors` 목록에 무기 액터(`BP_WeaponRifle` 등)가 **하나도 없다.** 대신 `CurrentWeaponType`이 4회 / 0.0KB로 잡혀, 무기 교체의 네트워크 비용이 측정 한계 이하임이 확인되었다. 로켓 투사체(`BP_ProjectileRocket`, 0.5KB / 60회)만 의도대로 복제된다(D18). **의도한 것만 복제되고 의도하지 않은 것은 복제되지 않는다.**
 
