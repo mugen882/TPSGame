@@ -213,6 +213,14 @@ FTPSLagCompensationScope::FTPSLagCompensationScope(UWorld* World, ACommonCharact
 		ACommonCharacter* Char = *It;
 		if (!Char || Char == ExcludeCharacter) continue;
 
+		/*
+			아군은 되감지 않는다.
+
+			히트스캔이 아군에게 들어가지 않으므로(ApplyDamageEffect의 팀 필터)
+			되감아도 판정에 영향이 없다.
+		*/
+		if (!ACommonCharacter::AreHostile(ExcludeCharacter, Char)) continue;
+
 		ULagCompensationComponent* Comp = Char->FindComponentByClass<ULagCompensationComponent>();
 		if (!Comp) continue;
 

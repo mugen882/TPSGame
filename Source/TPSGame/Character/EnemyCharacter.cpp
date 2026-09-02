@@ -27,6 +27,9 @@
 
 AEnemyCharacter::AEnemyCharacter()
 {
+    // 팀 1 = 적. 플레이어(기본 0)와 서로 적대 관계가 된다.
+    TeamId = 1;
+
     HealthBarComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthBarWidget"));
     HealthBarComponent->SetupAttachment(RootComponent);
     HealthBarComponent->SetWidgetSpace(EWidgetSpace::Screen);   // 항상 카메라 향함 (billboard)

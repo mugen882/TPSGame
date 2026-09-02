@@ -44,7 +44,9 @@ void AProjectileRocket::Explode(const FVector& Center)
         const float Alpha = FMath::Clamp(1.f - (Dist / ExplosionRadius), 0.f, 1.f);
         const float Falloff = FMath::Lerp(MinDamageRatio, 1.f, Alpha);
 
-        ACommonCharacter::ApplyDamageEffect(Char, DamageEffectClass, Damage * Falloff, GetInstigator());
+        // 폭발은 아군도 맞는다. 반경 판정은 조준 실수가 아니라 위치 선택의 결과다.
+        ACommonCharacter::ApplyDamageEffect(
+            Char, DamageEffectClass, Damage * Falloff, GetInstigator(), /*bAffectsFriendly=*/true);
     }
 
     // 연출은 베이스의 멀티캐스트를 재사용한다.

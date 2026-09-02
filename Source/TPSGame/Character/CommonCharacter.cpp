@@ -223,9 +223,18 @@ void ACommonCharacter::ApplyDamageEffect(
     AActor* Target,
     TSubclassOf<UGameplayEffect> DamageEffectClass,
     float Damage,
-    AActor* SourceActor)
+    AActor* SourceActor,
+    bool bAffectsFriendly)
 {
     if (!Target || !DamageEffectClass || !SourceActor) return;
+
+    /*
+        아군 사격 차단.
+
+        폭발(bAffectsFriendly=true)은 통과시킨다. 반경 판정은 조준 실수가 아니라
+        위치 선택의 결과이므로, 쏜 사람의 책임으로 남기는 편이 게임플레이에 맞다.
+    */
+    if (!bAffectsFriendly && !AreHostile(SourceActor, Target)) return;
 
     ACommonCharacter* HitChar = Cast<ACommonCharacter>(Target);
     if (!HitChar) return;
@@ -264,6 +273,17 @@ void ACommonCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 
     // 가해자는 피격자 본인만 알면 된다.
     DOREPLIFETIME_CONDITION(ACommonCharacter, LastDamageInstigator, COND_OwnerOnly);
+}
+
+bool ACommonCharacter::AreHostile(const AActor* A, const AActor* B)
+{
+    const ACommonCharacter* CharA = Cast<ACommonCharacter>(A);
+    const ACommonCharacter* CharB = Cast<ACommonCharacter>(B);
+
+    // 팀 개념이 없는 대상은 막지 않는다.
+    if (!CharA || !CharB) return true;
+
+    return CharA->GetTeamId() != CharB->GetTeamId();
 }
 
 void ACommonCharacter::NotifyDamageFrom(AActor* DamageInstigator)

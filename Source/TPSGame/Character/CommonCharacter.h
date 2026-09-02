@@ -61,12 +61,29 @@ public:
 	bool IsReloading() const;
 	bool IsSwapping() const;
 
-	// 대상에게 데미지 GE 적용 (무기·투사체 공용)
+	/*
+		대상에게 데미지 GE 적용 (무기·투사체 공용). 서버 전용.
+
+		bAffectsFriendly는 무기의 성격을 선언한다.
+		  false (기본) : 히트스캔·직격 — 아군에게는 들어가지 않는다
+		  true         : 폭발 — 반경 안이면 아군도 맞는다
+	*/
 	static void ApplyDamageEffect(
 		AActor* Target,
 		TSubclassOf<UGameplayEffect> DamageEffectClass,
 		float Damage,
-		AActor* SourceActor);
+		AActor* SourceActor,
+		bool bAffectsFriendly = false);
+
+	/*
+		적대 관계 판정.
+
+		둘 중 하나라도 ACommonCharacter가 아니면 적대로 간주한다.
+		팀 개념이 없는 대상(파괴 가능한 오브젝트 등)을 막지 않기 위해서다.
+	*/
+	static bool AreHostile(const AActor* A, const AActor* B);
+
+	uint8 GetTeamId() const { return TeamId; }
 
 	void NotifyDamageFrom(AActor* DamageInstigator);
 
@@ -225,6 +242,14 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "GAS")
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+
+	/*
+		팀 식별자. 0 = 플레이어, 1 = 적.
+
+		서버에서만 판정에 쓰이므로 복제하지 않는다.
+	*/
+	UPROPERTY(EditDefaultsOnly, Category="Team")
+	uint8 TeamId = 0;
 
 private:
 	UFUNCTION()
