@@ -9,6 +9,40 @@
 
 ---
 
+## 패키징 빌드 Co-op 실행 (RunCoop.bat)
+
+패키징된 데디케이티드 서버 + 클라이언트를 한 번에 띄워 멀티플레이를 검증하는 배치 스크립트.
+실행하면 **서버 1개, 클라이언트 2개**가 자동으로 기동된다.
+
+### 1. 빌드 산출물 배치
+
+`RunCoop.bat` 상단의 경로 변수와 동일한 위치에 패키징 결과물을 배치한다.
+
+```bat
+set SERVER_EXE=D:\Ex\TPSGame_Package_Server\WindowsServer\TPSGameServer.exe
+set CLIENT_EXE=D:\Ex\TPSGame_Package_Client\Windows\TPSGame.exe
+```
+
+| 변수 | 대상 | 패키징 타깃 |
+|---|---|---|
+| `SERVER_EXE` | `TPSGameServer.exe` | Windows Server (Dedicated Server) |
+| `CLIENT_EXE` | `TPSGame.exe` | Windows (Client) |
+
+### 2. 실행
+
+`RunCoop.bat` 실행 → 서버 1 + 클라이언트 2 기동.
+
+### 3. 경로를 바꿀 경우
+
+패키징 출력 폴더를 다른 위치로 잡았다면 `RunCoop.bat`의 위 두 변수만 실제 경로에 맞게 수정하면 된다.
+
+### 주의
+
+- 서버/클라이언트 빌드가 **동일한 소스 리비전**에서 패키징되어야 한다. 버전이 어긋나면 접속 단계에서 실패한다.
+- 서버 exe는 `WindowsServer/`, 클라이언트 exe는 `Windows/` 하위에 생성되므로 폴더 구조를 그대로 유지할 것.
+
+---
+
 ## 1. 출발점
 
 싱글플레이 코드베이스는 아키텍처가 정리된 상태였다. 갓클래스는 컴포넌트로 분해되어 있었고(`UWeaponManagerComponent` / `UPlayerAimComponent` / `UEnemyCombatComponent`), GAS 기반 전투와 Behavior Tree + EQS 기반 AI가 동작했다.
@@ -756,6 +790,75 @@ D22에서 "새 폰 = 새 ASC = 깨끗한 상태"라고 적었지만, **컨트롤
 
 ## 4. 검증 방법
 
+### 콘솔 명령 모음
+
+명령마다 **어느 머신에서 실행되어야 하는지**가 다르다. 지연은 클라이언트가 만들고, 되감기 판정과 대역폭 측정은 서버에서 일어난다.
+
+| 명령 | 실행 머신 | 용도 |
+|---|---|---|
+| `TPS.LagCompensation 0 / 1` | **서버** | 랙 보상을 끄고 켠다 (전/후 시연) |
+| `TPS.LagCompensation.Debug 1` | **서버** | A/B 측정 로그 + 되감은 캡슐 디버그 드로우 |
+| `netprofile enable` / `disable` | **서버** | 대역폭 프로파일 기록 (`Saved/Profiling/*.nprof`) |
+| `showdebug ai` | 서버 | BT 상태와 실행 중인 태스크 |
+| `NetEmulation.PktLag <ms>` | 클라이언트 | 편도 지연 주입. 200~500이 관찰하기 좋다 |
+| `showdebug abilitysystem` | 클라이언트 | 어트리뷰트·태그·활성 어빌리티 확인 |
+| `showdebug net` | 클라이언트 | 액터 채널 개폐 관찰 |
+| `Log TPSLog Verbose` | 양쪽 | 상세 로그 켜기 |
+
+앞의 두 개가 이 프로젝트에서 만든 것이고, 나머지는 엔진 기본 명령이다.
+
+#### 데디케이티드 서버에는 게임 콘솔이 없다
+
+`~` 키로 여는 콘솔은 뷰포트가 있어야 동작한다. 서버는 렌더링을 하지 않으므로 **서버 명령을 실행하는 방법이 따로 필요하다.**
+
+**A. 실행 인자로 미리 지정 (가장 확실)**
+
+```
+TPSGameServer.exe ThirdPersonMap -log -port=7777 -ExecCmds="TPS.LagCompensation.Debug 1"
+```
+
+여러 개면 쉼표로 구분한다. `RunCoop.bat`에 넣어두면 매번 입력할 필요가 없다.
+
+**B. `-log` 콘솔 창에 직접 입력**
+
+`-log`로 뜨는 로그 창 하단 입력란에 명령을 칠 수 있다. 실행 중에 켜고 끄며 비교할 때 쓴다.
+
+**C. `DefaultEngine.ini`에 영구 설정**
+
+```ini
+[SystemSettings]
+TPS.LagCompensation=1
+```
+
+기본값을 바꾸는 용도다. 시연 때마다 토글할 것은 여기 두지 않는다.
+
+#### 디버그 드로우는 데디에서 볼 수 없다
+
+되감기와 `DrawDebugCapsule`이 서버 월드에서 일어나는데 서버에는 화면이 없다. **캡슐을 눈으로 보려면 PIE `Play As Listen Server`**로 띄우고,
+
+```
+호스트 창:     TPS.LagCompensation.Debug 1
+다른 클라 창:  NetEmulation.PktLag 500
+```
+
+**클라 창에서 사격하고 호스트 화면을 관찰**한다. 호스트는 `IsLocallyControlled()`라 되감기가 0이므로 사격자가 될 수 없다.
+
+데디케이티드 환경에서는 디버그 드로우 대신 **A/B 측정 로그**로 확인한다(D24). 애초에 그것이 이 로그를 만든 이유다.
+
+#### 그 외
+
+`NetEmulation.PktLag`은 **편도** 지연이다. 300을 걸면 RTT가 600ms가 되며 `MaxRewindSeconds`(0.3초) 상한에 걸린다.
+
+로그 레벨은 `DefaultEngine.ini`에 있다.
+
+```ini
+[Core.Log]
+TPSLog=Verbose
+LogEOSSDK=Error
+```
+
+---
+
 ### 네트워크 로그 접두사
 
 모든 네트워크 관련 로그에 실행 머신 정보를 붙였다.
@@ -789,7 +892,7 @@ M2b-1 완료 시점의 정상 로그. 발사 한 번에 두 머신이 각자의 
 ### 예측 동작 확인
 
 ```
-NetEmulation.PktLag 200
+NetEmulation.PktLag 200     (클라이언트 콘솔)
 ```
 
 | 관찰 대상 | 기대 동작 | 의미 |
@@ -810,10 +913,12 @@ NetEmulation.PktLag 200
 ### 랙 보상 A/B 측정
 
 ```
-TPS.LagCompensation.Debug 1     # A/B 프로브 + 디버그 캡슐 드로우
-TPS.LagCompensation 0 / 1       # 보상 자체를 끄고 켠다 (시연용)
-NetEmulation.PktLag 300
+서버:       -ExecCmds="TPS.LagCompensation.Debug 1"  (실행 인자)
+클라이언트: NetEmulation.PktLag 300                   (게임 콘솔)
 ```
+
+데디케이티드 서버에는 게임 콘솔이 없으므로 실행 인자나 `-log` 창을 쓴다.
+자세한 내용은 위의 "콘솔 명령 모음" 참조.
 
 움직이는 적을 정조준해 여러 발 쏘고 로그의 판정을 센다.
 

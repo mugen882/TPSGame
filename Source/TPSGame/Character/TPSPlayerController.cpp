@@ -49,6 +49,64 @@ void ATPSPlayerController::AcknowledgePossession(APawn* InPawn)
     SetupHUDFor(InPawn);   // 원격 클라이언트 경로
 }
 
+void ATPSPlayerController::DiscardWidgetsFromPreviousWorld()
+{
+    UWorld* CurrentWorld = GetWorld();
+
+    // 위젯을 만든 월드가 그대로면 유지한다. (같은 맵 안에서의 리스폰)
+    if (WidgetOwningWorld.Get() == CurrentWorld)
+    {
+        return;
+    }
+
+    /*
+        여기까지 왔다면 트래블로 월드가 교체된 것이다.
+
+        SeamlessTravel은 PlayerController를 새 월드로 데려가지만
+        뷰포트의 위젯은 전부 걷어낸다. UPROPERTY로 잡고 있는 위젯 포인터는
+        GC되지 않아 그대로 살아 있으므로, "이미 있으니 만들지 않는다" 식의
+        생성 가드는 여기서 조용히 오작동한다.
+        위젯은 화면에 없고 코드는 다시 만들지 않아 UI가 통째로 사라진다.
+    */
+    const bool bHadAnyWidget = (HUDWidget != nullptr)
+        || (GameOverWidget != nullptr)
+        || (QuitConfirmWidget != nullptr);
+
+    if (HUDWidget)
+    {
+        HUDWidget->RemoveFromParent();
+        HUDWidget = nullptr;
+    }
+
+    if (GameOverWidget)
+    {
+        GameOverWidget->RemoveFromParent();
+        GameOverWidget = nullptr;
+    }
+
+    if (QuitConfirmWidget)
+    {
+        QuitConfirmWidget->RemoveFromParent();
+        QuitConfirmWidget = nullptr;
+    }
+
+    if (bHadAnyWidget)
+    {
+        UE_LOG(TPSLog, Log, TEXT("[CL] 월드 교체 감지 — 이전 월드의 위젯을 폐기한다"));
+
+        // 결과 화면/일시정지에서 바꿔둔 입력 모드가 새 월드까지 따라올 수 있다.
+        RestoreGameInputMode();
+    }
+
+    WidgetOwningWorld = nullptr;
+}
+
+void ATPSPlayerController::RestoreGameInputMode()
+{
+    SetShowMouseCursor(false);
+    SetInputMode(FInputModeGameOnly());
+}
+
 void ATPSPlayerController::SetupHUDFor(APawn* InPawn)
 {
     // 화면에 그리는 UI는 로컬 컨트롤러에서만 생성
@@ -57,13 +115,18 @@ void ATPSPlayerController::SetupHUDFor(APawn* InPawn)
         return;
     }
 
-    // 트래블 등으로 결과 화면이 남아 있을 수 있다. 새 폰에 빙의하면 정리한다.
+    /*
+        폰 판정보다 먼저 수행한다.
+        트래블 정리는 어떤 폰에 빙의하든 반드시 한 번은 돌아야 한다.
+    */
+    DiscardWidgetsFromPreviousWorld();
+
+    // 같은 월드 안에서 리스폰한 경우에도 결과 화면이 남아 있을 수 있다.
     if (GameOverWidget)
     {
         GameOverWidget->RemoveFromParent();
         GameOverWidget = nullptr;
-        SetShowMouseCursor(false);
-        SetInputMode(FInputModeGameOnly());
+        RestoreGameInputMode();
     }
 
     APlayerCharacter* PlayerCharacter = Cast<APlayerCharacter>(InPawn);
@@ -72,13 +135,27 @@ void ATPSPlayerController::SetupHUDFor(APawn* InPawn)
         return;
     }
 
-    // HUD는 단 한 번만 생성하고, 이후 빙의 때는 참조만 다시 연결한다.
+    /*
+        HUD는 월드당 한 번 생성한다.
+
+        같은 월드 안에서의 리스폰은 기존 위젯을 재사용하고 InitFor로 참조만
+        다시 연결한다. 트래블로 월드가 바뀐 경우는 위에서 이미 폐기됐으므로
+        여기서 새로 만들어지고, NativeConstruct가 다시 돌면서 새 GameState의
+        델리게이트에 정상적으로 바인딩된다.
+    */
     if (!HUDWidget && HUDClass)
     {
         HUDWidget = CreateWidget<UTPSHUDWidget>(this, HUDClass);
         if (HUDWidget)
         {
             HUDWidget->AddToViewport();
+            WidgetOwningWorld = GetWorld();
+
+            UE_LOG(TPSLog, Log, TEXT("[CL] HUD 생성 — World=%s"), *GetNameSafe(GetWorld()));
+        }
+        else
+        {
+            UE_LOG(TPSLog, Error, TEXT("[CL] HUD 생성 실패 — HUDClass=%s"), *GetNameSafe(HUDClass));
         }
     }
 
@@ -117,6 +194,7 @@ void ATPSPlayerController::OnPausePressed()
     }
 
     QuitConfirmWidget->AddToViewport(100);   // HUD 위에
+    WidgetOwningWorld = GetWorld();
 
     SetPause(true);
 
@@ -136,8 +214,7 @@ void ATPSPlayerController::CloseQuitConfirm()
     }
 
     SetPause(false);
-    SetInputMode(FInputModeGameOnly());
-    bShowMouseCursor = false;
+    RestoreGameInputMode();
 }
 
 void ATPSPlayerController::ConfirmQuit()
@@ -246,6 +323,7 @@ void ATPSPlayerController::Client_ShowGameOver_Implementation(bool bVictory)
         if (GameOverWidget)
         {
             GameOverWidget->AddToViewport(10);   // HUD 위에 그린다
+            WidgetOwningWorld = GetWorld();
         }
     }
 
@@ -292,6 +370,5 @@ void ATPSPlayerController::Client_HideGameOver_Implementation()
         SeamlessTravel에서는 PlayerController가 살아남으므로 UIOnly 상태가
         새 맵까지 따라온다. 결과 화면을 띄울 때 바꾼 것은 반드시 되돌려야 한다.
     */
-    SetShowMouseCursor(false);
-    SetInputMode(FInputModeGameOnly());
+    RestoreGameInputMode();
 }
